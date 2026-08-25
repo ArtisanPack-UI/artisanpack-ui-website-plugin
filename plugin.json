@@ -1,0 +1,31 @@
+{
+    "$schema": "https://artisanpack-ui.dev/schemas/plugin.json",
+    "slug": "artisanpack-ui",
+    "name": "ArtisanPack UI",
+    "version": "0.1.0",
+    "description": "Site-specific plugin for artisanpack-ui.dev. Wires up ArtisanPack UI marketing site extensions on top of the JMWD Keystone CMS: admin surfaces, custom field types, hook subscriptions, and any bespoke content models the site needs.",
+    "author": "Jacob Martella",
+    "homepage": "https://artisanpack-ui.dev",
+    "license": "MIT",
+    "service_provider": "ArtisanPackUI\\Site\\ArtisanPackUIServiceProvider",
+    "requires": {
+        "cms-framework": "^2.5",
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "ArtisanPackUI\\Site\\": "src/"
+        }
+    },
+    "migrations": "database/migrations",
+    "nav": [
+        {
+            "slug": "artisanpack-ui",
+            "label": "ArtisanPack UI",
+            "url": "/admin/artisanpack-ui",
+            "icon": "fas.layer-group",
+            "permission": "access_admin_dashboard",
+            "order": 60
+        }
+    ]
+}
