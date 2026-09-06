@@ -6,8 +6,8 @@ declare(strict_types=1);
  * ArtisanPack UI Site Plugin Service Provider.
  *
  * Site-specific plugin for artisanpack-ui.dev. Registers admin surfaces, nav
- * entries, custom field types, and hook subscriptions that are unique to the
- * marketing site and don't belong in a shared package.
+ * entries, custom field types, block types, and hook subscriptions that are
+ * unique to the marketing site and don't belong in a shared package.
  *
  * @since 0.1.0
  */
@@ -16,6 +16,9 @@ namespace ArtisanPackUI\Site;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
+use ArtisanPackUI\Site\Blocks\TerminalBlock;
+use ArtisanPackUI\VisualEditor\Facades\VisualEditor;
 use Inertia\Inertia;
 
 final class ArtisanPackUIServiceProvider extends PluginServiceProvider
@@ -27,10 +30,21 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
 
     public function boot(): void
     {
+        $this->registerViewNamespace();
         $this->registerAdminSurfaces();
         $this->registerFieldTypes();
         $this->registerEditPanels();
+        $this->registerBlocks();
         $this->registerHookSubscriptions();
+    }
+
+    /**
+     * Bind the `site::` view namespace to the plugin's resources/views/ dir so
+     * block render callbacks can address partials as `site::blocks.terminal`.
+     */
+    protected function registerViewNamespace(): void
+    {
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'site');
     }
 
     protected function registerAdminSurfaces(): void
@@ -82,6 +96,30 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         //     $panels[] = [ ... ];
         //     return $panels;
         // } );
+    }
+
+    /**
+     * Register the site-only Gutenberg blocks.
+     *
+     * These are dynamic, server-rendered blocks — the editor synthesizes an
+     * `edit` component from each attribute schema (SSR preview + inspector
+     * controls) so no client bundle rebuild is needed.
+     */
+    protected function registerBlocks(): void
+    {
+        $terminal = $this->app->make(TerminalBlock::class);
+        VisualEditor::registerServerBlock(
+            TerminalBlock::NAME,
+            $terminal->metadata(),
+            $terminal->render(...),
+        );
+
+        $copyCommand = $this->app->make(CopyCommandBlock::class);
+        VisualEditor::registerServerBlock(
+            CopyCommandBlock::NAME,
+            $copyCommand->metadata(),
+            $copyCommand->render(...),
+        );
     }
 
     /**
