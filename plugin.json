@@ -12,6 +12,9 @@
         "cms-framework": "^2.5",
         "php": "^8.2"
     },
+    "update": {
+        "github": "ArtisanPack-UI/artisanpack-ui-website-plugin"
+    },
     "autoload": {
         "psr-4": {
             "ArtisanPackUI\\Site\\": "src/"
