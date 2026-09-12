@@ -108,18 +108,16 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     protected function registerBlocks(): void
     {
         $terminal = $this->app->make(TerminalBlock::class);
-        VisualEditor::registerServerBlock(
-            TerminalBlock::NAME,
-            $terminal->metadata(),
-            $terminal->render(...),
-        );
+        VisualEditor::registerBlockType(TerminalBlock::NAME, $terminal->metadata());
+        VisualEditor::registerDynamicBlock(TerminalBlock::NAME, [
+            'render' => $terminal->render(...),
+        ]);
 
         $copyCommand = $this->app->make(CopyCommandBlock::class);
-        VisualEditor::registerServerBlock(
-            CopyCommandBlock::NAME,
-            $copyCommand->metadata(),
-            $copyCommand->render(...),
-        );
+        VisualEditor::registerBlockType(CopyCommandBlock::NAME, $copyCommand->metadata());
+        VisualEditor::registerDynamicBlock(CopyCommandBlock::NAME, [
+            'render' => $copyCommand->render(...),
+        ]);
     }
 
     /**
