@@ -15,11 +15,16 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
 use ArtisanPackUI\Site\Blocks\TerminalBlock;
+use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
 use ArtisanPackUI\VisualEditor\Facades\VisualEditor;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
+use Throwable;
 
 final class ArtisanPackUIServiceProvider extends PluginServiceProvider
 {
@@ -34,8 +39,34 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         $this->registerAdminSurfaces();
         $this->registerFieldTypes();
         $this->registerEditPanels();
+        $this->registerContentTypes();
         $this->registerBlocks();
         $this->registerHookSubscriptions();
+    }
+
+    /**
+     * Idempotently provision the `package` content type so the CPT survives DB
+     * resets without needing a manual `db:seed`. The guard is cheap — a single
+     * pluck on `content_types` — and short-circuits before the seeder runs.
+     * Any failure (missing table during install, migration mid-flight) is
+     * swallowed so a half-installed DB can't 500 the whole app on boot.
+     */
+    protected function registerContentTypes(): void
+    {
+        try {
+            if (! Schema::hasTable('content_types')) {
+                return;
+            }
+
+            if (DB::table('content_types')->where('slug', 'package')->exists()) {
+                return;
+            }
+
+            $this->app->make(PackageContentTypeSeeder::class)
+                ->run($this->app->make(ContentTypeManager::class));
+        } catch (Throwable) {
+            // Boot must never fail on best-effort provisioning.
+        }
     }
 
     /**
