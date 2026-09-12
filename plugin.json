@@ -2,7 +2,7 @@
     "$schema": "https://artisanpack-ui.dev/schemas/plugin.json",
     "slug": "artisanpack-ui",
     "name": "ArtisanPack UI",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Site-specific plugin for artisanpack-ui.dev. Wires up ArtisanPack UI marketing site extensions on top of the JMWD Keystone CMS: admin surfaces, custom field types, hook subscriptions, and any bespoke content models the site needs.",
     "author": "Jacob Martella",
     "homepage": "https://artisanpack-ui.dev",
