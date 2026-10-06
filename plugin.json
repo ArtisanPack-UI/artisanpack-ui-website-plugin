@@ -21,12 +21,24 @@
         }
     },
     "migrations": "database/migrations",
+    "federated_module": {
+        "name": "artisanpack-ui",
+        "entry": "dist/assets/remoteEntry.js",
+        "exposes": [
+            "./boot",
+            "./packages-board",
+            "./settings",
+            "./package-docs",
+            "./package-stats",
+            "./package-issues"
+        ]
+    },
     "nav": [
         {
             "slug": "artisanpack-ui",
             "label": "ArtisanPack UI",
             "url": "/admin/artisanpack-ui",
-            "icon": "fas.layer-group",
+            "icon": "artisanpackui-logo",
             "permission": "access_admin_dashboard",
             "order": 60
         }

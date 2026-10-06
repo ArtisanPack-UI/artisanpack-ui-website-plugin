@@ -1,0 +1,18 @@
+# Keep distribution archives (git archive) lean: exclude dev-only files so a
+# `git archive` ZIP contains only what Keystone needs to run the plugin.
+/.github            export-ignore
+/.gitignore         export-ignore
+/.gitattributes     export-ignore
+
+# Dev-only tooling and sources — the built federated bundle in dist/ is the
+# only frontend artifact Keystone loads at runtime. bin/build-release-zip.sh
+# exports the tree through `git archive` and injects the built dist/, so
+# anything listed here also stays out of the release ZIP. resources/views and
+# resources/icons ship; only the bundle's source is excluded.
+/bin                export-ignore
+/plans              export-ignore
+/resources/js       export-ignore
+/vite.config.js     export-ignore
+/tsconfig.json      export-ignore
+/package.json       export-ignore
+/package-lock.json  export-ignore
