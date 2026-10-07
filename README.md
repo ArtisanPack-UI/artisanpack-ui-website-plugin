@@ -45,9 +45,10 @@ from the release ZIP (see **Releasing**).
 ## Tests
 
 The PHP suite runs under Testbench, without a Keystone host, like the other
-first-party plugins. It covers the settings, permissions and API clients;
-Keystone-only glue (nav, icons, blocks, field provisioning) is checked in a
-running install.
+first-party plugins. It covers the settings, permissions, API clients, package sync and
+the `apui` icon set and picker catalog (with the visual editor and icons
+packages as dev dependencies); Keystone-only glue (nav, the sidebar icon,
+blocks, field provisioning) is checked in a running install.
 
 ```bash
 composer install

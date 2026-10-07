@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Tests;
 
+use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Tests\Fixtures\User;
@@ -35,6 +36,7 @@ abstract class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
+            HooksServiceProvider::class,
             InertiaServiceProvider::class,
             TestPluginServiceProvider::class,
         ];
@@ -48,6 +50,28 @@ abstract class TestCase extends BaseTestCase
             $table->string('email')->unique();
             $table->string('password');
             $table->timestamps();
+        });
+
+        // The `package` content type's records table, as the host's seeder
+        // and the PackageFields provisioner leave it.
+        Schema::create('packages', function (Blueprint $table): void {
+            $table->id();
+            $table->string('title')->nullable();
+            $table->string('status', 32)->default('draft');
+            $table->timestamp('published_at')->nullable();
+            $table->timestamps();
+            $table->longText('content')->nullable();
+            $table->text('excerpt')->nullable();
+            $table->unsignedBigInteger('featured_image_id')->nullable();
+            $table->bigInteger('docs_package_id')->nullable();
+            $table->string('registry')->nullable();
+            $table->string('composer_name')->nullable();
+            $table->string('npm_name')->nullable();
+            $table->string('github_repo')->nullable();
+            $table->string('version')->nullable();
+            $table->text('icon')->nullable();
+            $table->string('docs_url')->nullable();
+            $table->dateTime('last_synced_at')->nullable();
         });
 
         $this->loadMigrationsFrom(dirname(__DIR__) . '/database/migrations');

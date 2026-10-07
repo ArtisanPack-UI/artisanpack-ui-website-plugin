@@ -6,7 +6,9 @@
  * effects here bind against the host's shared hooks registry in time to be
  * read.
  *
- * Contributes the Docs, Stats and Issues tabs to the `package` edit screen.
+ * Contributes the Docs, Stats and Issues tabs and the icon picker to the
+ * `package` edit screen, and the "Sync from docs" button to the Packages
+ * list.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
  * `contentEdit` Inertia prop, so `AdminEditSlot` seeds every slot with `[]`
@@ -22,9 +24,12 @@
  */
 
 import { addFilter } from '@artisanpack-ui/hooks-js';
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 
+import { SyncFromDocsButton } from './components/SyncFromDocsButton';
 import { NoAccess, useAbilities } from './components/ui';
+import { IconPickerField, type EditForm } from './fields/IconPickerField';
+import { RegistryField } from './fields/RegistryField';
 import type { Abilities, PackageTabProps } from './lib/types';
 
 /** The content type slug the plugin's seeder registers for packages. */
@@ -150,5 +155,41 @@ addFilter('keystone.admin.panels.resolved', (component: unknown, entry: unknown)
 
     return typeof identifier === 'string' ? (TAB_COMPONENTS.get(identifier) ?? component) : component;
 });
+
+/**
+ * Mount the registry select and the icon picker on the `package` edit
+ * screen. The host renders every custom field as a text input there and
+ * ignores select choices and field-type editors, so they go in the
+ * editor-sections slot, the one place that receives the edit form. Each
+ * writes the same `values.*` entry its text input shows. See
+ * `fields/RegistryField.tsx` and `fields/IconPickerField.tsx`.
+ */
+addFilter('keystone.admin.dynamicContent.editorSections', (node: unknown, context: unknown) => {
+    const { form, contentType } = (context ?? {}) as { form?: EditForm; contentType?: string | { slug?: string } };
+    const slug = typeof contentType === 'string' ? contentType : contentType?.slug;
+
+    if (slug !== PACKAGE_CONTENT_TYPE || !form) {
+        return node;
+    }
+
+    return (
+        <>
+            {node as ReactNode}
+            <RegistryField form={form} />
+            <IconPickerField form={form} />
+        </>
+    );
+});
+
+/**
+ * Add "Sync from docs" to the admin top bar. The button renders only on
+ * the Packages list, for users with the sync permission.
+ */
+addFilter('keystone.admin.topbar.right', (node: unknown) => (
+    <>
+        {node as ReactNode}
+        <SyncFromDocsButton />
+    </>
+));
 
 export {};

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Tests;
 
+use ArtisanPackUI\Icons\Registries\IconSetRegistration;
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Support\AdminPages;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use ArtisanPackUI\Site\Tests\Support\GatePermissionMiddleware;
 use ArtisanPackUI\Site\Tests\Support\PassthroughMiddleware;
+use ArtisanPackUI\VisualEditor\Services\Icon\IconSvgResolver;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -26,12 +28,21 @@ use Illuminate\Support\ServiceProvider;
  * `AdminPageManager` routes them (`web`, `auth`, `can:{capability}`). The
  * host-only `two-factor` aliases pass through and `permission` checks the
  * Gate, so every permission gate is exercised for real.
+ *
+ * The visual editor's provider needs the host too, so its
+ * {@see IconSvgResolver} is bound here the way that provider binds it:
+ * lazily, from the `ap.icons.registerIconSets` filter.
  */
 class TestPluginServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
         PluginBootstrapper::register($this->app);
+
+        $this->app->singleton(IconSvgResolver::class, static fn (): IconSvgResolver => new IconSvgResolver(static fn (): array => array_map(
+            static fn (array $set): string => $set['path'],
+            applyFilters('ap.icons.registerIconSets', new IconSetRegistration)->getSets(),
+        )));
     }
 
     public function boot(): void

@@ -82,15 +82,36 @@ final class DocsPackage
     }
 
     /**
+     * The `owner/name` GitHub repo, read from the first of the changelog,
+     * docs and wiki links that points at one (the docs site requires them
+     * to be GitHub URLs).
+     */
+    public function githubRepo(): ?string
+    {
+        foreach ([$this->changelogUrl, $this->docsUrl, $this->wikiUrl] as $url) {
+            if (null !== $url && 1 === preg_match('#^https?://(?:www\.)?github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+?)(?:\.git)?(?:[/?\#]|$)#i', $url, $matches)) {
+                return $matches[1] . '/' . $matches[2];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The fields `PATCH /packages/{package}` requires. The docs site
      * validates a PATCH like a create, so an update must resend them all;
      * `icon` is written back as the raw string the docs site stores.
+     *
+     * The docs site only accepts GitHub links, but older packages still
+     * hold links it no longer accepts (GitLab wikis). Those are left out
+     * rather than resent, so the docs site keeps its stored value and the
+     * PATCH isn't refused over a field it never meant to change.
      *
      * @return array<string, mixed>
      */
     public function toWritePayload(): array
     {
-        return [
+        $payload = [
             'name'             => $this->name,
             'slug'             => $this->slug,
             'homepage'         => $this->homepage,
@@ -101,6 +122,19 @@ final class DocsPackage
             'version'          => $this->version,
             'package_registry' => $this->registry,
         ];
+
+        foreach (['docs_url', 'wiki_url', 'changelog_url'] as $link) {
+            if (null !== $payload[$link] && ! self::isGitHubUrl($payload[$link])) {
+                unset($payload[$link]);
+            }
+        }
+
+        return $payload;
+    }
+
+    private static function isGitHubUrl(string $url): bool
+    {
+        return 1 === preg_match('#^https?://(?:www\.)?github\.com/#i', $url);
     }
 
     private static function nullableString(mixed $value): ?string
