@@ -29,8 +29,17 @@ final class Package extends Model
 
     protected $table = 'packages';
 
-    /** @var array<int, string> */
-    protected $fillable = ['title', 'content', 'excerpt', 'status', 'published_at', 'featured_image_id'];
+    /**
+     * The core columns plus the custom fields
+     * {@see \ArtisanPackUI\Site\Support\PackageFields} registers.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'title', 'content', 'excerpt', 'status', 'published_at', 'featured_image_id',
+        'docs_package_id', 'registry', 'composer_name', 'npm_name', 'github_repo',
+        'version', 'icon', 'docs_url', 'last_synced_at',
+    ];
 
     /**
      * `content` holds the visual editor's block tree JSON — matches the
@@ -45,8 +54,11 @@ final class Package extends Model
     protected function casts(): array
     {
         return [
-            'content'      => 'array',
-            'published_at' => 'datetime',
+            'content'         => 'array',
+            'published_at'    => 'datetime',
+            'docs_package_id' => 'integer',
+            'icon'            => 'array',
+            'last_synced_at'  => 'datetime',
         ];
     }
 }

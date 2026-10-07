@@ -20,15 +20,18 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
 use ArtisanPackUI\Site\Blocks\TerminalBlock;
 use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
+use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
+use ArtisanPackUI\Site\Support\AdminPages;
+use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
+use ArtisanPackUI\Site\Support\Permissions;
+use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use ArtisanPackUI\VisualEditor\Facades\VisualEditor;
 use BladeUI\Icons\Factory as IconFactory;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
-use Inertia\Inertia;
-use Inertia\Response;
 use Throwable;
 
 final class ArtisanPackUIServiceProvider extends PluginServiceProvider
@@ -37,7 +40,7 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
      * The plugin slug, which is also the federated remote's name and the
      * `plugins/{slug}/{page}` Inertia page prefix the host resolves.
      */
-    public const SLUG = 'artisanpack-ui';
+    public const SLUG = AdminPages::SLUG;
 
     /**
      * Prefix of the plugin's own icon set (`resources/icons/`). Kept free of
@@ -53,16 +56,19 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
 
     public function register(): void
     {
-        // Bind plugin services on the container as needed.
+        PluginBootstrapper::register($this->app);
     }
 
     public function boot(): void
     {
+        PluginBootstrapper::boot($this->app);
+
         $this->registerViewNamespace();
         $this->registerIconSet();
         $this->registerFederatedRemote();
         $this->registerAssetRoute();
         $this->registerAdminSurfaces();
+        $this->registerRoutes();
         $this->registerFieldTypes();
         $this->registerEditPanels();
         $this->registerContentTypes();
@@ -71,27 +77,39 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Idempotently provision the `package` content type so the CPT survives DB
-     * resets without needing a manual `db:seed`. The guard is cheap — a single
-     * pluck on `content_types` — and short-circuits before the seeder runs.
-     * Any failure (missing table during install, migration mid-flight) is
-     * swallowed so a half-installed DB can't 500 the whole app on boot.
+     * Idempotently provision the `package` content type and its custom
+     * fields, so the CPT survives DB resets without needing a manual
+     * `db:seed`. The guard is cheap — one query for the package's
+     * `custom_fields` rows, which only exist once the type does — and
+     * short-circuits before the seeder runs. Any failure (missing table
+     * during install, migration mid-flight, a field key clash) is swallowed
+     * so a half-installed DB can't 500 the whole app on boot, and logged at
+     * most once an hour so a persistent failure doesn't flood the log.
      */
     protected function registerContentTypes(): void
     {
         try {
-            if (! Schema::hasTable('content_types')) {
+            if (! Schema::hasTable('content_types') || ! Schema::hasTable('custom_fields')) {
                 return;
             }
 
-            if (DB::table('content_types')->where('slug', 'package')->exists()) {
+            $fields = $this->app->make(PackageFieldProvisioner::class);
+
+            if ([] === $fields->missing()) {
                 return;
             }
 
             $this->app->make(PackageContentTypeSeeder::class)
-                ->run($this->app->make(ContentTypeManager::class));
-        } catch (Throwable) {
+                ->run($this->app->make(ContentTypeManager::class), $fields);
+        } catch (Throwable $exception) {
             // Boot must never fail on best-effort provisioning.
+            if (! Cache::add('artisanpack-ui:provisioning-failure-logged', true, 3600)) {
+                return;
+            }
+
+            Log::warning('ArtisanPack UI plugin could not provision the package content type.', [
+                'exception' => $exception->getMessage(),
+            ]);
         }
     }
 
@@ -182,8 +200,10 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Register the plugin's admin pages. Each renders a page component from
-     * the federated bundle (see {@see registerFederatedRemote()}).
+     * Register the plugin's admin pages from {@see AdminPages}. Each renders
+     * a page component from the federated bundle (see
+     * {@see registerFederatedRemote()}) behind its `can:` capability, and the
+     * nav entry shows to anyone holding a plugin permission.
      *
      * Registered directly on AdminMenuManager rather than
      * PluginServiceProvider::registerAdminPage() because the helper's `view`
@@ -194,51 +214,45 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     {
         $menu = $this->app->make(AdminMenuManager::class);
 
-        $menu->addPage(
-            __('ArtisanPack UI'),
-            self::SLUG,
-            'tools',
-            [
-                'action'     => static fn (): Response => self::renderPage('packages-board'),
-                'capability' => 'access_admin_dashboard',
-                'icon'       => self::MENU_ICON,
-                'order'      => 60,
-            ],
-        );
+        foreach (AdminPages::definitions() as $page) {
+            $options = [
+                'action'     => $page['action'],
+                'capability' => $page['capability'],
+                'order'      => $page['order'],
+            ];
 
-        $menu->addSubPage(
-            __('Settings'),
-            self::SLUG . '/settings',
-            self::SLUG,
-            [
-                'action'     => static fn (): Response => self::renderPage('settings'),
-                'capability' => 'access_admin_dashboard',
-                'order'      => 10,
-            ],
-        );
+            if (null === $page['parent']) {
+                $menu->addPage($page['title'], $page['slug'], 'tools', [...$options, 'icon' => self::MENU_ICON]);
+            } else {
+                $menu->addSubPage($page['title'], $page['slug'], $page['parent'], $options);
+            }
+        }
 
         $this->registerNavEntry([
             'slug'       => self::SLUG,
             'label'      => __('ArtisanPack UI'),
             'url'        => '/admin/' . self::SLUG,
             'icon'       => self::MENU_ICON,
-            'permission' => 'access_admin_dashboard',
+            'permission' => Permissions::ACCESS,
             'order'      => 60,
         ]);
     }
 
     /**
-     * Render one of the federated admin pages with the props every page
-     * shares.
+     * Register the plugin's JSON admin endpoints through
+     * {@see ArtisanPackUIRoutes}, which the test suite registers too.
+     *
+     * Plugins boot after the framework's `booted()` callback has refreshed
+     * the router's name and action lookups, so they are refreshed again
+     * here; without it `route('artisanpack-ui.*')` returns nothing.
      */
-    protected static function renderPage(string $page): Response
+    protected function registerRoutes(): void
     {
-        return Inertia::render('plugins/' . self::SLUG . '/' . $page, [
-            'nav' => [
-                'board'    => url('/admin/' . self::SLUG),
-                'settings' => url('/admin/' . self::SLUG . '/settings'),
-            ],
-        ]);
+        ArtisanPackUIRoutes::register();
+
+        $routes = $this->app['router']->getRoutes();
+        $routes->refreshNameLookups();
+        $routes->refreshActionLookups();
     }
 
     /**

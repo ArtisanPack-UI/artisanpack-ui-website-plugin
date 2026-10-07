@@ -24,7 +24,8 @@
 import { addFilter } from '@artisanpack-ui/hooks-js';
 import { lazy, Suspense, type ComponentType } from 'react';
 
-import type { PackageTabProps } from './lib/types';
+import { NoAccess, useAbilities } from './components/ui';
+import type { Abilities, PackageTabProps } from './lib/types';
 
 /** The content type slug the plugin's seeder registers for packages. */
 const PACKAGE_CONTENT_TYPE = 'package';
@@ -34,6 +35,8 @@ interface PackageTab {
     title: string;
     component: string;
     order: number;
+    /** The plugin ability the tab needs (see `Support/Permissions.php`). */
+    ability: keyof Abilities;
     load: () => Promise<{ default: ComponentType<PackageTabProps> }>;
 }
 
@@ -43,6 +46,7 @@ const PACKAGE_TABS: PackageTab[] = [
         title: 'Docs',
         component: 'artisanpack-ui.PackageDocsTab',
         order: 10,
+        ability: 'sync',
         load: () => import('./tabs/PackageDocsTab'),
     },
     {
@@ -50,6 +54,7 @@ const PACKAGE_TABS: PackageTab[] = [
         title: 'Stats',
         component: 'artisanpack-ui.PackageStatsTab',
         order: 20,
+        ability: 'statsView',
         load: () => import('./tabs/PackageStatsTab'),
     },
     {
@@ -57,19 +62,33 @@ const PACKAGE_TABS: PackageTab[] = [
         title: 'Issues',
         component: 'artisanpack-ui.PackageIssuesTab',
         order: 30,
+        ability: 'issuesManage',
         load: () => import('./tabs/PackageIssuesTab'),
     },
 ];
 
 /**
- * Wrap a lazily loaded tab in its own Suspense boundary. The host mounts
- * built-in-resolved panels without one, so a bare `lazy()` component would
- * suspend up to the nearest boundary above the whole edit screen.
+ * Wrap a lazily loaded tab in its own Suspense boundary, behind its
+ * ability. The host mounts built-in-resolved panels without a boundary, so
+ * a bare `lazy()` component would suspend up to the nearest boundary above
+ * the whole edit screen.
+ *
+ * The ability check lives here, in the rendered tab, because the entries
+ * filter below runs inside the host's render and can't read page props.
+ * A user without the ability sees the tab with a notice instead of its
+ * body, and never loads the body's chunk; the tab's endpoints enforce the
+ * same permission server side.
  */
-function suspended(load: PackageTab['load']): ComponentType<PackageTabProps> {
-    const Lazy = lazy(load);
+function gated(tab: PackageTab): ComponentType<PackageTabProps> {
+    const Lazy = lazy(tab.load);
 
-    return function SuspendedTab(props: PackageTabProps) {
+    return function GatedTab(props: PackageTabProps) {
+        const can = useAbilities();
+
+        if (!can[tab.ability]) {
+            return <NoAccess title={tab.title} />;
+        }
+
         return (
             <Suspense
                 fallback={
@@ -86,7 +105,7 @@ function suspended(load: PackageTab['load']): ComponentType<PackageTabProps> {
 
 /** Component identifier → resolved component, built once at boot. */
 const TAB_COMPONENTS = new Map<string, ComponentType<PackageTabProps>>(
-    PACKAGE_TABS.map((tab) => [tab.component, suspended(tab.load)]),
+    PACKAGE_TABS.map((tab) => [tab.component, gated(tab)]),
 );
 
 /**

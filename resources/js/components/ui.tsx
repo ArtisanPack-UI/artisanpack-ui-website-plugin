@@ -7,18 +7,31 @@
  * bundle carries no CSS of its own.
  */
 
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 
-import type { Nav } from '../lib/types';
+import type { Abilities, Nav } from '../lib/types';
 
 export const CARD_CLASS =
     'rounded-[var(--radius-box)] border border-base-300/60 bg-base-100 p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]';
 
-const NAV_ITEMS: { key: keyof Nav; label: string }[] = [
+const NAV_ITEMS: { key: keyof Nav; label: string; ability?: keyof Abilities }[] = [
     { key: 'board', label: 'Packages board' },
-    { key: 'settings', label: 'Settings' },
+    { key: 'settings', label: 'Settings', ability: 'sync' },
 ];
+
+const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: false, apiTokensManage: false };
+
+/**
+ * The current user's plugin abilities from the `artisanpackUi.can` prop the
+ * plugin shares with every admin page. Falls back to "nothing allowed" if
+ * the prop is missing, so a gated surface fails closed.
+ */
+export function useAbilities(): Abilities {
+    const { props } = usePage<{ artisanpackUi?: { can?: Abilities } }>();
+
+    return props.artisanpackUi?.can ?? NO_ABILITIES;
+}
 
 /**
  * Page shell for the plugin's full admin pages: a heading, an optional
@@ -26,12 +39,14 @@ const NAV_ITEMS: { key: keyof Nav; label: string }[] = [
  */
 export function PluginPage({
     nav,
+    can,
     active,
     title,
     description,
     children,
 }: {
     nav: Nav;
+    can: Abilities;
     active: keyof Nav;
     title: string;
     description?: string;
@@ -45,7 +60,7 @@ export function PluginPage({
                     {description && <p className="mt-2 text-sm text-base-content/60">{description}</p>}
                 </div>
                 <nav aria-label="ArtisanPack UI" className="flex flex-wrap gap-1 border-b border-base-300/60">
-                    {NAV_ITEMS.map((item) => (
+                    {NAV_ITEMS.filter((item) => !item.ability || can[item.ability]).map((item) => (
                         <Link
                             key={item.key}
                             href={nav[item.key]}
@@ -79,6 +94,22 @@ export function ComingSoon({ title, roadmapItem, children }: { title: string; ro
                 Planned for roadmap {roadmapItem}.
             </p>
             {children}
+        </section>
+    );
+}
+
+/**
+ * Shown in place of a surface the user's permissions don't cover. The
+ * server enforces the same permission on the surface's endpoints; this only
+ * keeps the UI from offering what would be refused.
+ */
+export function NoAccess({ title }: { title: string }) {
+    return (
+        <section className={CARD_CLASS}>
+            <h2 className="text-base font-semibold text-base-content">{title}</h2>
+            <p className="mt-2 text-sm text-base-content/60">
+                You don't have permission to use this. Ask an administrator to grant it.
+            </p>
         </section>
     );
 }

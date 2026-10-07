@@ -12,3 +12,6 @@ Thumbs.db
 
 # Build output — `npm run build` produces the federated bundle
 /dist/
+
+# Composer (dev-only: the Testbench suite)
+/vendor/

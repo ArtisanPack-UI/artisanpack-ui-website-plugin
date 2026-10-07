@@ -12,10 +12,55 @@ export interface Nav {
 }
 
 /**
+ * What the current user may do, from the plugin's permissions. Every page
+ * receives it as `can`, and every admin page (including the host's package
+ * edit screen) as the shared `artisanpackUi.can` prop.
+ */
+export interface Abilities {
+    sync: boolean;
+    issuesManage: boolean;
+    statsView: boolean;
+    apiTokensManage: boolean;
+}
+
+/**
  * The props every plugin admin page receives.
  */
 export interface PluginPageProps {
     nav: Nav;
+    can: Abilities;
+}
+
+/**
+ * The saved integration settings as the Settings page sees them. Secrets
+ * are write-only: only whether each one is stored is sent.
+ */
+export interface IntegrationSettings {
+    docsBaseUrl: string | null;
+    hasDocsApiToken: boolean;
+    githubAppId: string | null;
+    githubInstallationId: string | null;
+    hasGitHubPrivateKey: boolean;
+    githubOrganization: string;
+    githubProjectNumber: number | null;
+}
+
+/**
+ * The result of a "Test connection" check.
+ */
+export interface ConnectionCheck {
+    ok: boolean;
+    message: string;
+    details: string[];
+}
+
+export interface SettingsPageProps extends PluginPageProps {
+    settings: IntegrationSettings;
+    endpoints: {
+        update: string;
+        testDocs: string;
+        testGitHub: string;
+    };
 }
 
 /**
