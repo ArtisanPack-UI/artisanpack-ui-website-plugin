@@ -20,7 +20,14 @@
             "ArtisanPackUI\\Site\\": "src/"
         }
     },
-    "migrations": "database/migrations",
+    "migrations_path": "database/migrations",
+    "rollback_migrations_on_delete": true,
+    "permissions": [
+        "artisanpack-ui.sync",
+        "artisanpack-ui.issues.manage",
+        "artisanpack-ui.stats.view",
+        "artisanpack-ui.api-tokens.manage"
+    ],
     "federated_module": {
         "name": "artisanpack-ui",
         "entry": "dist/assets/remoteEntry.js",
@@ -39,7 +46,7 @@
             "label": "ArtisanPack UI",
             "url": "/admin/artisanpack-ui",
             "icon": "artisanpackui-logo",
-            "permission": "access_admin_dashboard",
+            "permission": "artisanpack-ui.access",
             "order": 60
         }
     ]

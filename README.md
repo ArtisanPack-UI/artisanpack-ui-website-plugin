@@ -42,6 +42,18 @@ npm run build      # or `npm run dev` to rebuild on change
 `dist/` is gitignored. Build it locally for development; live sites get it
 from the release ZIP (see **Releasing**).
 
+## Tests
+
+The PHP suite runs under Testbench, without a Keystone host, like the other
+first-party plugins. It covers the settings, permissions and API clients;
+Keystone-only glue (nav, icons, blocks, field provisioning) is checked in a
+running install.
+
+```bash
+composer install
+composer test
+```
+
 ## Releasing
 
 Keystone's plugin updater installs the GitHub release's `.zip` asset, which is

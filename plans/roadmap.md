@@ -252,7 +252,7 @@ The PHP side is unchanged: `AdminWidgetManager::register()` with a `KeystoneAdmi
 
 ## Open questions
 
-1. **Custom field storage.** Keystone custom-field groups, or columns the plugin owns on `packages`? Answer this before 1.1.
+1. ~~**Custom field storage.**~~ Answered in 1.1: Keystone custom fields. On the dynamic content-type screen a custom field is a physical column on `packages` *plus* a `custom_fields` row, and the row is what makes the generic edit screen render, validate, save and send the column. Plugin-owned columns would be stripped from the edit payload. The plugin provisions the fields itself on boot (`Support/PackageFieldProvisioner`), adding each column outside a transaction because `CustomFieldManager::createField()` hits the MySQL implicit-commit trap.
 2. ~~**Federated module reach.**~~ Answered by the 0.1 spike (see **0.1 spike findings**): tabs yes, through the boot module; custom-field editors no on the package screen, pending a Keystone change.
 3. **GitHub App identity.** Comments and edits will appear as the App bot, not as the admin. Is that acceptable, or should comments carry an "on behalf of" prefix?
 4. **Rate limits on live proxying.** Admin and Command Center traffic both hit GitHub live. Add a short cache (30–60s) on the Command Center `boards` and `stats` endpoints if limits become a problem.
