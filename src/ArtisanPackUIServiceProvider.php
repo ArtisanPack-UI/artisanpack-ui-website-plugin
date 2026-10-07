@@ -23,6 +23,7 @@ use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
 use ArtisanPackUI\Site\Support\AdminPages;
+use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
@@ -79,8 +80,9 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     /**
      * Idempotently provision the `package` content type and its custom
      * fields, so the CPT survives DB resets without needing a manual
-     * `db:seed`. The guard is cheap — one query for the package's
-     * `custom_fields` rows, which only exist once the type does — and
+     * `db:seed`, and a changed field type reaches existing installs. The
+     * guard is cheap — one query for the package's `custom_fields` rows,
+     * which only exist once the type does — and
      * short-circuits before the seeder runs. Any failure (missing table
      * during install, migration mid-flight, a field key clash) is swallowed
      * so a half-installed DB can't 500 the whole app on boot, and logged at
@@ -95,7 +97,7 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
 
             $fields = $this->app->make(PackageFieldProvisioner::class);
 
-            if ([] === $fields->missing()) {
+            if (! $fields->isOutdated()) {
                 return;
             }
 
@@ -256,12 +258,13 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Register any custom field types the site needs. Left as an anchor for
-     * future additions — call `apRegisterFieldType()` for each one.
+     * Register the plugin's custom field types: the {@see IconPickerField}
+     * the package `icon` field uses. Registering it is what lets Keystone's
+     * custom-field admin accept the type.
      */
     protected function registerFieldTypes(): void
     {
-        // apRegisterFieldType( 'some_field', [ ... ] );
+        apRegisterFieldType(IconPickerField::TYPE, IconPickerField::definition());
     }
 
     /**

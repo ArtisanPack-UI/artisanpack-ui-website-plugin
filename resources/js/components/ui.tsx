@@ -10,7 +10,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 
-import type { Abilities, Nav } from '../lib/types';
+import type { Abilities, Nav, SharedEndpoints, SharedPluginProps } from '../lib/types';
 
 export const CARD_CLASS =
     'rounded-[var(--radius-box)] border border-base-300/60 bg-base-100 p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]';
@@ -28,9 +28,46 @@ const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: f
  * the prop is missing, so a gated surface fails closed.
  */
 export function useAbilities(): Abilities {
-    const { props } = usePage<{ artisanpackUi?: { can?: Abilities } }>();
+    const { props } = usePage<{ artisanpackUi?: Partial<SharedPluginProps> }>();
 
     return props.artisanpackUi?.can ?? NO_ABILITIES;
+}
+
+/**
+ * The plugin endpoints shared with every admin page, or null if the prop
+ * is missing (the plugin's provider didn't boot), so callers render
+ * nothing rather than call a guessed URL.
+ */
+export function useSharedEndpoints(): SharedEndpoints | null {
+    const { props } = usePage<{ artisanpackUi?: Partial<SharedPluginProps> }>();
+
+    return props.artisanpackUi?.endpoints ?? null;
+}
+
+/**
+ * An SVG drawn in the current text colour. The markup is used as a CSS
+ * mask image rather than inserted into the page, so nothing in it can
+ * run, and the icon still follows the admin's light / dark theme.
+ */
+export function SvgPreview({ svg, className = 'h-6 w-6' }: { svg: string; className?: string }) {
+    const image = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+
+    return (
+        <span
+            aria-hidden="true"
+            className={`inline-block shrink-0 bg-current ${className}`}
+            style={{
+                maskImage: image,
+                WebkitMaskImage: image,
+                maskRepeat: 'no-repeat',
+                WebkitMaskRepeat: 'no-repeat',
+                maskPosition: 'center',
+                WebkitMaskPosition: 'center',
+                maskSize: 'contain',
+                WebkitMaskSize: 'contain',
+            }}
+        />
+    );
 }
 
 /**

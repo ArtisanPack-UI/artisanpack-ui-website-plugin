@@ -78,3 +78,65 @@ export interface PanelContext {
 export interface PackageTabProps {
     context: PanelContext;
 }
+
+/**
+ * Plugin endpoints shared with every admin page as `artisanpackUi.endpoints`,
+ * for the surfaces the boot module mounts inside host pages.
+ */
+export interface SharedEndpoints {
+    icons: string;
+    syncImport: string;
+    syncVersions: string;
+    syncIcons: string;
+}
+
+/**
+ * The `artisanpackUi` prop the plugin shares with every admin page.
+ */
+export interface SharedPluginProps {
+    can: Abilities;
+    endpoints: SharedEndpoints;
+}
+
+/**
+ * An icon reference: the `{set, name}` the visual editor's
+ * `artisanpack/icon` block takes as `iconRef`.
+ */
+export interface IconRef {
+    set: string;
+    name: string;
+}
+
+/**
+ * One icon from the plugin's icon catalog, with its SVG for the preview.
+ */
+export interface CatalogIcon extends IconRef {
+    svg: string;
+}
+
+export interface CatalogSet {
+    prefix: string;
+    label: string;
+    count: number;
+}
+
+export interface IconCatalogResponse {
+    sets: CatalogSet[];
+    perPage: number;
+    total: number;
+    icons: CatalogIcon[];
+}
+
+/**
+ * What one sync step did (see `Services/Sync/SyncReport.php`).
+ */
+export interface SyncReport {
+    created: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    docsUpdated: number;
+    /** The cursor for a batched step's next batch, or null when done. */
+    next: number | null;
+    messages: string[];
+}

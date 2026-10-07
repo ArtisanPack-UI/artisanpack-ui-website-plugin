@@ -13,6 +13,8 @@
         "php": "^8.2"
     },
     "require-dev": {
+        "artisanpack-ui/icons": "^2.1",
+        "artisanpack-ui/visual-editor": "^1.12",
         "inertiajs/inertia-laravel": "^2.0|^3.0",
         "orchestra/testbench": "^10.2|^11.0",
         "pestphp/pest": "^3.8|^4.0",

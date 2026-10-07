@@ -18,11 +18,9 @@ namespace ArtisanPackUI\Site\Support;
  * stripped from the edit payload and need a bespoke edit panel and save
  * endpoint. {@see PackageFieldProvisioner} creates the fields idempotently.
  *
- * The edit screen renders every custom field as a text input today, so
- * `icon` holds its `{set, name}` iconRef as JSON text until the icon picker
- * (roadmap 1.2) replaces the input. It is a `text` column rather than
- * `json` so a hand-typed invalid value is stored as-is instead of failing
- * the save.
+ * `icon` is an {@see IconPickerField} holding its `{set, name}` iconRef as
+ * JSON text. It is a `text` column rather than `json` so a hand-typed
+ * invalid value is stored as-is instead of failing the save.
  *
  * @phpstan-type FieldDefinition array{key: string, name: string, type: string, column_type: string, description: string, order: int, options?: array<string, mixed>}
  *
@@ -98,7 +96,7 @@ final class PackageFields
             [
                 'key'         => 'icon',
                 'name'        => 'Icon',
-                'type'        => 'text',
+                'type'        => IconPickerField::TYPE,
                 'column_type' => 'text',
                 'description' => 'iconRef JSON, e.g. {"set":"fas","name":"cube"}.',
                 'order'       => 70,
@@ -133,6 +131,19 @@ final class PackageFields
     }
 
     /**
+     * The field holding a package's name on its registry (`composer_name`
+     * or `npm_name`), or null for an unknown registry.
+     */
+    public static function registryNameColumn(?string $registry): ?string
+    {
+        return match ($registry) {
+            self::REGISTRY_PACKAGIST => 'composer_name',
+            self::REGISTRY_NPM       => 'npm_name',
+            default                  => null,
+        };
+    }
+
+    /**
      * The definitions not yet registered, given the keys that are.
      *
      * @param  list<string>  $registeredKeys
@@ -145,5 +156,30 @@ final class PackageFields
             self::definitions(),
             static fn (array $field): bool => ! in_array($field['key'], $registeredKeys, true),
         ));
+    }
+
+    /**
+     * The definitions registered with a different type than they declare
+     * now, keyed by field key, given each registered key's type. This is
+     * how a field's type change (e.g. `icon` becoming an `icon_picker`)
+     * reaches installs that registered it before.
+     *
+     * @param  array<string, string>  $registeredTypes  Field key → registered type.
+     *
+     * @return array<string, string> Field key → the type it should have.
+     */
+    public static function retyped(array $registeredTypes): array
+    {
+        $retyped = [];
+
+        foreach (self::definitions() as $field) {
+            $registered = $registeredTypes[$field['key']] ?? null;
+
+            if (null !== $registered && $registered !== $field['type']) {
+                $retyped[$field['key']] = $field['type'];
+            }
+        }
+
+        return $retyped;
     }
 }
