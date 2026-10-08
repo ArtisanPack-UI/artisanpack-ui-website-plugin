@@ -16,7 +16,9 @@ use Inertia\Response;
 final class AdminPageController
 {
     /**
-     * The packages board. The global kanban lands in roadmap item 5.4.
+     * The packages board: the global kanban of every package on the org
+     * project (roadmap 5.4). The page loads the board itself, from
+     * {@see BoardController::index()}.
      */
     public function board(Request $request): Response
     {

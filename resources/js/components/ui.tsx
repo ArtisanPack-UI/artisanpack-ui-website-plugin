@@ -119,23 +119,6 @@ export function PluginPage({
 }
 
 /**
- * Empty state for a surface whose real content lands in a later roadmap
- * phase. Keeps every expose mountable today so the federation wiring can be
- * verified end to end.
- */
-export function ComingSoon({ title, roadmapItem, children }: { title: string; roadmapItem: string; children?: ReactNode }) {
-    return (
-        <section className={CARD_CLASS}>
-            <h2 className="text-base font-semibold text-base-content">{title}</h2>
-            <p className="mt-2 text-sm text-base-content/60">
-                Planned for roadmap {roadmapItem}.
-            </p>
-            {children}
-        </section>
-    );
-}
-
-/**
  * Shown in place of a surface the user's permissions don't cover. The
  * server enforces the same permission on the surface's endpoints; this only
  * keeps the UI from offering what would be refused.

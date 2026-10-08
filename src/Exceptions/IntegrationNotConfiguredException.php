@@ -23,4 +23,9 @@ final class IntegrationNotConfiguredException extends RuntimeException
     {
         return new self(__('The GitHub App isn\'t configured yet. Add its App ID, private key and installation ID in ArtisanPack UI settings.'));
     }
+
+    public static function gitHubProject(): self
+    {
+        return new self(__('The org GitHub Project isn\'t configured yet. Add its project number in ArtisanPack UI settings.'));
+    }
 }

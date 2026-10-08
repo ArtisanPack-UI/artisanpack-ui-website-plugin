@@ -7,8 +7,8 @@
  * read.
  *
  * Contributes the Docs, Stats and Issues tabs, the sync status panel and
- * the icon picker to the `package` edit screen, and the "Sync from docs"
- * button to the Packages list.
+ * the icon picker to the `package` edit screen, the "Sync from docs"
+ * button to the Packages list, and the dashboard stats widgets' bodies.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
  * `contentEdit` Inertia prop, so `AdminEditSlot` seeds every slot with `[]`
@@ -23,14 +23,14 @@
  * singleton, so the references render into the host's React runtime.
  */
 
-import { addFilter } from '@artisanpack-ui/hooks-js';
+import { addFilter, doAction } from '@artisanpack-ui/hooks-js';
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 
 import { SyncFromDocsButton } from './components/SyncFromDocsButton';
 import { NoAccess, useAbilities } from './components/ui';
 import { IconPickerField, type EditForm } from './fields/IconPickerField';
 import { RegistryField } from './fields/RegistryField';
-import type { Abilities, PackageTabProps } from './lib/types';
+import type { Abilities, PackageTabProps, WidgetProps } from './lib/types';
 
 /** The content type slug the plugin's seeder registers for packages. */
 const PACKAGE_CONTENT_TYPE = 'package';
@@ -210,5 +210,27 @@ addFilter('keystone.admin.topbar.right', (node: unknown) => (
         <SyncFromDocsButton />
     </>
 ));
+
+/**
+ * The dashboard stats widgets' bodies (roadmap 4.3), keyed by each PHP
+ * widget's `extendedInfo()['component']` (see `src/Widgets`). Registered
+ * through the host's `registerFederated` action rather than its widget
+ * registry module, which isn't a shared federation singleton: the action
+ * writes into the registry the dashboard grid actually reads. The host
+ * wraps each in an error boundary and a Suspense boundary, so the lazy
+ * bodies load on first render. Capability gating is server side: the
+ * dashboard only hydrates widgets the user's permissions allow.
+ */
+const DASHBOARD_WIDGETS: Record<string, () => Promise<{ default: ComponentType<WidgetProps<never>> }>> = {
+    ArtisanPackUIDownloadsKpiWidget: () => import('./widgets/DownloadsKpiWidget'),
+    ArtisanPackUIDownloadsTrendWidget: () => import('./widgets/DownloadsTrendWidget'),
+    ArtisanPackUIGitHubOverviewWidget: () => import('./widgets/GitHubOverviewWidget'),
+    ArtisanPackUITopPackagesWidget: () => import('./widgets/TopPackagesWidget'),
+    ArtisanPackUIReleaseFeedWidget: () => import('./widgets/ReleaseFeedWidget'),
+};
+
+for (const [key, load] of Object.entries(DASHBOARD_WIDGETS)) {
+    doAction('keystone.admin.dashboard.widget.registerFederated', key, lazy(load));
+}
 
 export {};
