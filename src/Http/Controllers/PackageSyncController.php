@@ -14,6 +14,7 @@ use ArtisanPackUI\Site\Services\Sync\PackageSyncRunner;
 use ArtisanPackUI\Site\Services\Sync\PackageVersionSync;
 use ArtisanPackUI\Site\Services\Sync\SyncReport;
 use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,8 +25,9 @@ use Illuminate\Http\Request;
  * split into batches so no request waits on every registry lookup.
  *
  * A step that can't start at all (the docs site isn't configured or can't
- * be read) answers 422 with an admin-friendly message. Per-package
- * problems are reported inside the 200 report instead.
+ * be read) answers 422 with an admin-friendly message, and an import that
+ * finds another one still running answers 409. Per-package problems are
+ * reported inside the 200 report instead.
  *
  * Also the Edit Package sync status panel: the package's last sync
  * outcome, and its "Sync now" action, which runs all three steps for that
@@ -103,6 +105,8 @@ final class PackageSyncController
             $report = $step();
         } catch (IntegrationNotConfiguredException|DocsSiteException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => __('A sync is already running. Try again in a minute.')], 409);
         }
 
         return response()->json(['message' => $message, 'report' => $report->toArray()]);

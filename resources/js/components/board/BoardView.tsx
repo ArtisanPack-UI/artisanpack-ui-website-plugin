@@ -86,6 +86,12 @@ export function BoardView({
                 )}
             </div>
 
+            {board.truncated && (
+                <p className="rounded-md border border-warning/40 px-3 py-2 text-sm text-base-content/70">
+                    Showing the first {board.items.length} items; the project has more.
+                </p>
+            )}
+
             {count === 0 ? (
                 <p className="text-sm text-base-content/60">{emptyMessage}</p>
             ) : (

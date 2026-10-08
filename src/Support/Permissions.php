@@ -15,10 +15,13 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * separately. Admins hold all of them through the host's `Gate::before`
  * bypass. Everything the plugin exposes checks one of them:
  *
- *   - {@see self::SYNC}: the Settings page and its connection checks, and
- *     everything that talks to the docs site (sync, imports, doc reorder).
+ *   - {@see self::SYNC}: everything that talks to the docs site (sync,
+ *     imports, doc reorder).
  *   - {@see self::ISSUES_MANAGE}: the kanban boards and issue edits.
  *   - {@see self::STATS_VIEW}: the Stats tab and the dashboard stats widgets.
+ *   - {@see self::SETTINGS_MANAGE}: edit integration settings and run
+ *     connection tests. Kept apart from {@see self::SYNC} because the
+ *     settings hold the credentials sync runs on.
  *
  * {@see self::ACCESS} is not a stored permission. It is a Gate ability that
  * passes when the user holds any of them, and gates the plugin's nav
@@ -41,6 +44,11 @@ final class Permissions
     public const STATS_VIEW = 'artisanpack-ui.stats.view';
 
     /**
+     * @since 1.0.0
+     */
+    public const SETTINGS_MANAGE = 'artisanpack-ui.settings.manage';
+
+    /**
      * Gate ability: the user holds at least one plugin permission.
      */
     public const ACCESS = 'artisanpack-ui.access';
@@ -52,7 +60,7 @@ final class Permissions
      */
     public static function all(): array
     {
-        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW];
+        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW, self::SETTINGS_MANAGE];
     }
 
     /**
@@ -70,16 +78,17 @@ final class Permissions
     /**
      * What the given user may do, keyed for the React bundle.
      *
-     * @return array{sync: bool, issuesManage: bool, statsView: bool}
+     * @return array{sync: bool, issuesManage: bool, statsView: bool, settingsManage: bool}
      */
     public static function abilitiesFor(Gate $gate, ?Authenticatable $user): array
     {
         $allows = static fn (string $permission): bool => null !== $user && $gate->forUser($user)->allows($permission);
 
         return [
-            'sync'         => $allows(self::SYNC),
-            'issuesManage' => $allows(self::ISSUES_MANAGE),
-            'statsView'    => $allows(self::STATS_VIEW),
+            'sync'           => $allows(self::SYNC),
+            'issuesManage'   => $allows(self::ISSUES_MANAGE),
+            'statsView'      => $allows(self::STATS_VIEW),
+            'settingsManage' => $allows(self::SETTINGS_MANAGE),
         ];
     }
 }

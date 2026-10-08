@@ -85,6 +85,7 @@ export function IssueModal({
     const titleId = useId();
     const [issue, setIssue] = useState<IssueDetail | null>(null);
     const [comments, setComments] = useState<IssueComment[]>([]);
+    const [commentsTotal, setCommentsTotal] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<Draft | null>(null);
@@ -111,6 +112,7 @@ export function IssueModal({
                 if (active) {
                     setIssue(response);
                     setComments(response.comments ?? []);
+                    setCommentsTotal(response.commentsTotal ?? response.comments?.length ?? 0);
                 }
             })
             .catch((loadError: unknown) => {
@@ -224,6 +226,7 @@ export function IssueModal({
                 body: JSON.stringify({ body: comment }),
             });
             setComments((current) => [...current, created]);
+            setCommentsTotal((current) => current + 1);
             setComment('');
             setStatus('Comment added.');
         } catch (saveError) {
@@ -416,7 +419,16 @@ export function IssueModal({
 
                 {issue !== null && (
                     <section aria-label="Comments" className="mt-6 border-t border-base-300/60 pt-4">
-                        <h3 className="text-sm font-semibold text-base-content">Comments ({comments.length})</h3>
+                        <h3 className="text-sm font-semibold text-base-content">Comments ({Math.max(commentsTotal, comments.length)})</h3>
+                        {commentsTotal > comments.length && (
+                            <p className="mt-1 text-xs text-base-content/60">
+                                Showing the latest {comments.length} of {commentsTotal} comments.{' '}
+                                <a href={issue.url} target="_blank" rel="noopener noreferrer" className="link">
+                                    Open on GitHub
+                                </a>{' '}
+                                to read the rest.
+                            </p>
+                        )}
                         <ol className="mt-3 space-y-3">
                             {comments.map((entry) => (
                                 <li key={entry.id} className="rounded-md border border-base-300/60 p-3">

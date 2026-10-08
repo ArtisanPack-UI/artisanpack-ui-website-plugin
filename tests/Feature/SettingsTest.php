@@ -2,16 +2,19 @@
 
 declare(strict_types=1);
 
+use ArtisanPackUI\Site\Casts\SafeEncrypted;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use ArtisanPackUI\Site\Support\Permissions;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
-    actingAsUserWith([Permissions::SYNC]);
+    actingAsUserWith([Permissions::SETTINGS_MANAGE]);
 });
 
 /**
@@ -47,6 +50,38 @@ it('saves the settings and encrypts the credentials at rest', function (): void 
     foreach (['docs_api_token', 'github_app_id', 'github_private_key', 'github_installation_id'] as $column) {
         expect($raw->{$column})->not->toBeNull()->not->toContain($settings->{$column});
     }
+});
+
+it('treats credentials the app key can no longer decrypt as unset', function (): void {
+    IntegrationSettings::create(validSettings());
+
+    config()->set('app.key', 'base64:' . base64_encode(random_bytes(32)));
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    $this->get('/admin/artisanpack-ui/settings')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('settings.hasDocsApiToken', false)
+            ->where('settings.hasGitHubPrivateKey', false)
+            ->where('settings.docsBaseUrl', 'https://docs.example.invalid'));
+
+    $this->postJson('/admin/artisanpack-ui/settings/test/docs')
+        ->assertOk()
+        ->assertJson(['ok' => false])
+        ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'isn\'t configured'));
+});
+
+it('reads values the stock encrypted cast wrote', function (): void {
+    $settings = IntegrationSettings::create(['docs_base_url' => 'https://docs.example.invalid']);
+
+    // How Laravel's `encrypted` cast stores a value.
+    DB::table('artisanpack_ui_settings')->where('id', $settings->id)->update([
+        'docs_api_token' => app(Encrypter::class)->encrypt('legacy-token', false),
+    ]);
+
+    expect(IntegrationSettings::current()->docs_api_token)->toBe('legacy-token')
+        ->and((new SafeEncrypted)->get($settings, 'docs_api_token', null, []))->toBeNull();
 });
 
 it('never sends the stored secrets to the browser', function (): void {

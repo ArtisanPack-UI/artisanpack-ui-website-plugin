@@ -27,9 +27,13 @@ final class PackageSyncState extends Model
     /** @var list<string> */
     protected $fillable = ['package_id', 'last_synced_icon', 'last_checked_at', 'last_error'];
 
+    /**
+     * The package's row, created if it has none. `firstOrCreate()` retries
+     * the read when a concurrent run inserts the row first.
+     */
     public static function for(Package $package): self
     {
-        return self::query()->firstOrNew(['package_id' => $package->getKey()]);
+        return self::query()->firstOrCreate(['package_id' => $package->getKey()]);
     }
 
     /**

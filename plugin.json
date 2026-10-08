@@ -25,7 +25,8 @@
     "permissions": [
         "artisanpack-ui.sync",
         "artisanpack-ui.issues.manage",
-        "artisanpack-ui.stats.view"
+        "artisanpack-ui.stats.view",
+        "artisanpack-ui.settings.manage"
     ],
     "federated_module": {
         "name": "artisanpack-ui",

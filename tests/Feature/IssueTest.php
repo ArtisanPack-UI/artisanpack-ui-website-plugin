@@ -136,6 +136,31 @@ it('renders images as links and opens links in a new tab', function (): void {
         ->toContain('&lt;script&gt;');
 });
 
+it('shows the newest comments of a long thread', function (): void {
+    $comment = fn (int $id): array => ['id' => $id, 'user' => null, 'body' => "Comment {$id}", 'created_at' => '2026-10-02T10:00:00Z', 'html_url' => "https://github.com/c/{$id}"];
+
+    fakeGitHubRest([
+        'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12/comments*' => function (Request $request) use ($comment) {
+            $page = (int) $request['page'];
+
+            return Http::response(array_map($comment, range(($page - 1) * 100 + 1, min(250, $page * 100))));
+        },
+        'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12' => Http::response(restIssue(['comments' => 250])),
+    ]);
+
+    $response = $this->getJson('/admin/artisanpack-ui/issues/accessibility/12')
+        ->assertOk()
+        ->assertJsonPath('commentsTotal', 250)
+        ->assertJsonCount(100, 'comments');
+
+    expect($response->json('comments.0.id'))->toBe(151)
+        ->and($response->json('comments.99.id'))->toBe(250);
+
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '3' === (string) $request['page']);
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '2' === (string) $request['page']);
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '1' === (string) $request['page']);
+});
+
 it('sends only the fields that changed', function (): void {
     fakeGitHubRest([
         'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12' => Http::response(restIssue([
@@ -234,6 +259,23 @@ it('lists the repo\'s labels, open milestones and assignable users', function ()
         ]);
 
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/milestones') && 'open' === $request['state']);
+});
+
+it('pages through long option lists', function (): void {
+    $label = fn (int $id): array => ['name' => "label-{$id}", 'color' => 'ffffff'];
+
+    fakeGitHubRest([
+        'api.github.com/repos/ArtisanPack-UI/accessibility/labels*' => fn (Request $request) => Http::response(
+            '1' === (string) $request['page'] ? array_map($label, range(1, 100)) : array_map($label, range(101, 105)),
+        ),
+        'api.github.com/repos/ArtisanPack-UI/accessibility/milestones*' => Http::response([]),
+        'api.github.com/repos/ArtisanPack-UI/accessibility/assignees*'  => Http::response([]),
+    ]);
+
+    $this->getJson('/admin/artisanpack-ui/issues/accessibility/options')
+        ->assertOk()
+        ->assertJsonCount(105, 'labels')
+        ->assertJsonPath('labels.104.name', 'label-105');
 });
 
 it('stays inside the configured org', function (): void {

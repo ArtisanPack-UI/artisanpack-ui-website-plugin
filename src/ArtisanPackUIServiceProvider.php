@@ -26,6 +26,7 @@ use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
 use ArtisanPackUI\Site\Support\AdminPages;
 use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
+use ArtisanPackUI\Site\Support\PackageFields;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use ArtisanPackUI\Site\Widgets\BoardWidget;
@@ -63,6 +64,11 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
      */
     public const MENU_ICON = self::ICON_SET_PREFIX . '-logo';
 
+    /**
+     * Cached while field provisioning is backing off after a failure.
+     */
+    private const PROVISIONING_BACKOFF_KEY = 'artisanpack-ui:provisioning-backoff';
+
     public function register(): void
     {
         PluginBootstrapper::register($this->app);
@@ -89,31 +95,43 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     /**
      * Idempotently provision the `package` content type and its custom
      * fields, so the CPT survives DB resets without needing a manual
-     * `db:seed`, and a changed field type reaches existing installs. The
-     * guard is cheap — one query for the package's `custom_fields` rows,
-     * which only exist once the type does — and
-     * short-circuits before the seeder runs. Any failure (missing table
-     * during install, migration mid-flight, a field key clash) is swallowed
-     * so a half-installed DB can't 500 the whole app on boot, and logged at
-     * most once an hour so a persistent failure doesn't flood the log.
+     * `db:seed`, and a changed field type reaches existing installs.
+     *
+     * Once the current definitions are in place a marker keyed on them
+     * ({@see PackageFields::provisionedMarkerKey()}) is cached forever, so
+     * later requests skip the database entirely; a release that changes a
+     * definition changes the key and provisions again. After resetting the
+     * database without clearing the cache, run `php artisan cache:clear`.
+     *
+     * Any failure (missing table during install, migration mid-flight, a
+     * field key clash) is swallowed so a half-installed DB can't 500 the
+     * whole app on boot, backs off for five minutes so a failing database
+     * isn't queried on every request, and is logged at most once an hour.
      */
     protected function registerContentTypes(): void
     {
         try {
+            $marker = PackageFields::provisionedMarkerKey();
+
+            if (Cache::has($marker) || Cache::has(self::PROVISIONING_BACKOFF_KEY)) {
+                return;
+            }
+
             if (! Schema::hasTable('content_types') || ! Schema::hasTable('custom_fields')) {
                 return;
             }
 
             $fields = $this->app->make(PackageFieldProvisioner::class);
 
-            if (! $fields->isOutdated()) {
-                return;
+            if ($fields->isOutdated()) {
+                $this->app->make(PackageContentTypeSeeder::class)
+                    ->run($this->app->make(ContentTypeManager::class), $fields);
             }
 
-            $this->app->make(PackageContentTypeSeeder::class)
-                ->run($this->app->make(ContentTypeManager::class), $fields);
+            Cache::forever($marker, true);
         } catch (Throwable $exception) {
-            // Boot must never fail on best-effort provisioning.
+            Cache::put(self::PROVISIONING_BACKOFF_KEY, true, 300);
+
             if (! Cache::add('artisanpack-ui:provisioning-failure-logged', true, 3600)) {
                 return;
             }

@@ -9,6 +9,7 @@ use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageSyncState;
 use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 
 /**
  * Scheduled sync and "Sync now" (roadmap 2.4): runs the import, version and
@@ -94,6 +95,8 @@ final class PackageSyncRunner
                 $report->merge($step());
             } catch (IntegrationNotConfiguredException|DocsSiteException $exception) {
                 $errors[] = __(':step: :message', ['step' => $label, 'message' => $exception->getMessage()]);
+            } catch (LockTimeoutException) {
+                $errors[] = __(':step: :message', ['step' => $label, 'message' => __('Another sync was still running, so this step was skipped.')]);
             }
         }
 

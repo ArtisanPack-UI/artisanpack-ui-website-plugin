@@ -121,6 +121,20 @@ final class PackageFields
     }
 
     /**
+     * The cache key that marks these definitions as provisioned. It
+     * changes whenever a definition does, so an update that adds or
+     * retypes a field provisions again without anyone clearing the cache.
+     *
+     * @param  list<array<string, mixed>>|null  $definitions  Defaults to {@see self::definitions()}.
+     *
+     * @since 1.0.0
+     */
+    public static function provisionedMarkerKey(?array $definitions = null): string
+    {
+        return 'artisanpack-ui:fields-provisioned:' . sha1((string) json_encode($definitions ?? self::definitions()));
+    }
+
+    /**
      * Every field key, in display order.
      *
      * @return list<string>

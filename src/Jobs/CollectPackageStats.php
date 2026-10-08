@@ -10,9 +10,11 @@ use ArtisanPackUI\Site\Models\PackageSyncState;
 use ArtisanPackUI\Site\Services\Stats\PackageStatsCollector;
 use Illuminate\Bus\Queueable;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -27,13 +29,14 @@ use Illuminate\Support\Facades\Log;
  * gap rather than zeroes.
  *
  * Runs after {@see SyncPackages} so a newly synced registry name or repo
- * is already in place. Each run also drops the snapshots and sync state
+ * is already in place. Unique and guarded by {@see WithoutOverlapping} for
+ * the same reasons as that job. Each run also drops the snapshots and sync state
  * of packages that no longer exist, which have no foreign key to cascade
  * them away.
  *
  * @since 0.4.0
  */
-final class CollectPackageStats implements ShouldQueue
+final class CollectPackageStats implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -50,12 +53,32 @@ final class CollectPackageStats implements ShouldQueue
      */
     public int $tries = 1;
 
+    /**
+     * Seconds a queued run blocks another from being queued.
+     */
+    public int $uniqueFor = 3600;
+
+    /**
+     * Two runs never execute at once, even across workers: the second is
+     * dropped rather than released back onto the queue. The lock outlives
+     * {@see self::$timeout} so a run that is killed can't hold it forever.
+     *
+     * @return list<object>
+     *
+     * @since 1.0.0
+     */
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping(self::class))->dontRelease()->expireAfter(1200)];
+    }
+
     public static function schedule(Schedule $schedule): void
     {
         $schedule->job(new self)
             ->dailyAt('04:00')
             ->name('artisanpack-ui:collect-package-stats')
-            ->withoutOverlapping();
+            ->withoutOverlapping()
+            ->onOneServer();
     }
 
     public function handle(PackageStatsCollector $collector): void

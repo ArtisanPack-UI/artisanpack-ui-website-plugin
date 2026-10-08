@@ -50,6 +50,12 @@ class GitHubIssues
     /** The most comments the modal shows; GitHub's per-page maximum. */
     public const MAX_COMMENTS = 100;
 
+    /** Rows per page of labels, milestones and assignees; GitHub's maximum. */
+    public const OPTIONS_PAGE_SIZE = 100;
+
+    /** Pages of each option list read at most. */
+    public const MAX_OPTION_PAGES = 10;
+
     private static ?MarkdownConverter $markdown = null;
 
     /**
@@ -81,7 +87,8 @@ class GitHubIssues
     }
 
     /**
-     * The issue and its comments.
+     * The issue and its newest {@see self::MAX_COMMENTS} comments, oldest
+     * first, with `commentsTotal` saying how many it has in all.
      *
      * @return array<string, mixed>
      */
@@ -89,17 +96,50 @@ class GitHubIssues
     {
         $this->assertOnProject($repo, $number);
 
-        $path   = $this->issuePath($repo, $number);
-        $issue  = $this->github->rest('GET', $path)->data;
-        $thread = $this->github->rest('GET', $path . '/comments', ['per_page' => self::MAX_COMMENTS])->data;
+        $path  = $this->issuePath($repo, $number);
+        $issue = $this->github->rest('GET', $path)->data;
+        $issue = is_array($issue) ? $issue : [];
+        $total = max(0, (int) ($issue['comments'] ?? 0));
 
         return [
-            ...$this->presentIssue(is_array($issue) ? $issue : [], $repo),
-            'comments' => array_values(array_map(
+            ...$this->presentIssue($issue, $repo),
+            'comments' => array_map(
                 $this->presentComment(...),
-                array_filter(is_array($thread) ? $thread : [], is_array(...)),
-            )),
+                $this->latestComments($path, $total),
+            ),
+            'commentsTotal' => $total,
         ];
+    }
+
+    /**
+     * The newest {@see self::MAX_COMMENTS} comments, oldest first. GitHub
+     * lists comments oldest first, so this reads the last page, plus the
+     * page before it when the last one is short.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @since 1.0.0
+     */
+    private function latestComments(string $issuePath, int $total): array
+    {
+        $lastPage = max(1, (int) ceil($total / self::MAX_COMMENTS));
+        $comments = $this->commentsPage($issuePath, $lastPage);
+
+        if ($lastPage > 1 && count($comments) < self::MAX_COMMENTS) {
+            $comments = [...$this->commentsPage($issuePath, $lastPage - 1), ...$comments];
+        }
+
+        return array_slice($comments, -self::MAX_COMMENTS);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function commentsPage(string $issuePath, int $page): array
+    {
+        $thread = $this->github->rest('GET', $issuePath . '/comments', ['per_page' => self::MAX_COMMENTS, 'page' => $page])->data;
+
+        return array_values(array_filter(is_array($thread) ? $thread : [], is_array(...)));
     }
 
     /**
@@ -138,7 +178,8 @@ class GitHubIssues
 
     /**
      * The repo's labels, open milestones and assignable users, for the
-     * modal's editors.
+     * modal's editors. Each list is paged through while a page comes back
+     * full, up to {@see self::MAX_OPTION_PAGES} pages.
      *
      * @return array{labels: list<array{name: string, color: string}>, milestones: list<array{number: int, title: string}>, assignees: list<User>}
      */
@@ -150,10 +191,21 @@ class GitHubIssues
             throw new GitHubException(__('That repo has no issues on the org project.'), 404);
         }
 
-        $list = fn (string $path, array $query = []): array => array_values(array_filter(
-            (array) $this->github->rest('GET', $base . $path, ['per_page' => 100, ...$query])->data,
-            is_array(...),
-        ));
+        $list = function (string $path, array $query = []) use ($base): array {
+            $rows = [];
+
+            for ($page = 1; $page <= self::MAX_OPTION_PAGES; ++$page) {
+                $data = $this->github->rest('GET', $base . $path, ['per_page' => self::OPTIONS_PAGE_SIZE, 'page' => $page, ...$query])->data;
+                $data = is_array($data) ? $data : [];
+                $rows = [...$rows, ...array_filter($data, is_array(...))];
+
+                if (count($data) < self::OPTIONS_PAGE_SIZE) {
+                    break;
+                }
+            }
+
+            return array_values($rows);
+        };
 
         return [
             'labels' => array_map(static fn (array $label): array => [

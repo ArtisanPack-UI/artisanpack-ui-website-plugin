@@ -7,9 +7,11 @@ namespace ArtisanPackUI\Site\Jobs;
 use ArtisanPackUI\Site\Services\Sync\PackageSyncRunner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -18,11 +20,15 @@ use Illuminate\Support\Facades\Log;
  * outcome for its edit screen. See {@see PackageSyncRunner}.
  *
  * Scheduled by {@see \ArtisanPackUI\Site\Support\PluginBootstrapper}
- * through {@see self::schedule()}.
+ * through {@see self::schedule()}. Unique and guarded by
+ * {@see WithoutOverlapping}, because the scheduler's own
+ * `withoutOverlapping()` only covers dispatching it. A run can take up to
+ * {@see self::$timeout} seconds, so the queue connection's `retry_after`
+ * must be longer than that or the job is handed out twice.
  *
  * @since 0.4.0
  */
-final class SyncPackages implements ShouldQueue
+final class SyncPackages implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -39,12 +45,32 @@ final class SyncPackages implements ShouldQueue
      */
     public int $tries = 1;
 
+    /**
+     * Seconds a queued run blocks another from being queued.
+     */
+    public int $uniqueFor = 3600;
+
+    /**
+     * Two runs never execute at once, even across workers: the second is
+     * dropped rather than released back onto the queue. The lock outlives
+     * {@see self::$timeout} so a run that is killed can't hold it forever.
+     *
+     * @return list<object>
+     *
+     * @since 1.0.0
+     */
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping(self::class))->dontRelease()->expireAfter(1200)];
+    }
+
     public static function schedule(Schedule $schedule): void
     {
         $schedule->job(new self)
             ->dailyAt('03:00')
             ->name('artisanpack-ui:sync-packages')
-            ->withoutOverlapping();
+            ->withoutOverlapping()
+            ->onOneServer();
     }
 
     public function handle(PackageSyncRunner $runner): void

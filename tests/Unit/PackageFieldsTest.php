@@ -37,3 +37,13 @@ it('lists only the fields still to register', function (): void {
         ->toHaveCount(7)
         ->and(PackageFields::missing(PackageFields::keys()))->toBe([]);
 });
+
+it('keys the provisioned marker on the field definitions', function (): void {
+    $definitions = PackageFields::definitions();
+    $retyped     = $definitions;
+    $retyped[0]['type'] = 'textarea';
+
+    expect(PackageFields::provisionedMarkerKey())->toBe(PackageFields::provisionedMarkerKey($definitions))
+        ->and(PackageFields::provisionedMarkerKey())->toStartWith('artisanpack-ui:fields-provisioned:')
+        ->and(PackageFields::provisionedMarkerKey($retyped))->not->toBe(PackageFields::provisionedMarkerKey());
+});

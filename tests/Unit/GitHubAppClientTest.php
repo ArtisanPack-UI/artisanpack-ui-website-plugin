@@ -218,6 +218,26 @@ it('maps a GraphQL RATE_LIMITED error to a rate-limit exception', function (): v
     expect(fn () => gitHubClient()->graphql('{ viewer { login } }'))->toThrow(GitHubRateLimitException::class);
 });
 
+it('reports a GraphQL RATE_LIMITED error with the quota spent as the primary limit', function (): void {
+    $this->travelTo(now());
+
+    Http::fake([
+        ...fakeTokenExchange(),
+        'api.github.com/graphql' => Http::response(['errors' => [['type' => 'RATE_LIMITED', 'message' => 'API rate limit exceeded']]], 200, [
+            'X-RateLimit-Remaining' => '0',
+            'X-RateLimit-Reset'     => (string) (now()->getTimestamp() + 1800),
+        ]),
+    ]);
+
+    try {
+        gitHubClient()->graphql('{ viewer { login } }');
+        $this->fail('Expected a rate-limit exception.');
+    } catch (GitHubRateLimitException $exception) {
+        expect($exception->secondary)->toBeFalse()
+            ->and($exception->retryAfter)->toBeGreaterThanOrEqual(1790)->toBeLessThanOrEqual(1800);
+    }
+});
+
 it('refuses to run unconfigured or with a bad key', function (): void {
     Http::fake();
 

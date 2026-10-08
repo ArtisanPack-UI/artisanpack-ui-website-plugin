@@ -118,7 +118,7 @@ class GitHubAppClient
         $body = is_array($response->data) ? $response->data : [];
 
         if (! empty($body['errors']) && is_array($body['errors'])) {
-            throw $this->graphqlException($body['errors'], $response->status);
+            throw $this->graphqlException($body['errors'], $response->status, $response->rateLimitRemaining, $response->rateLimitReset);
         }
 
         return new GitHubResponse(
@@ -316,13 +316,21 @@ class GitHubAppClient
     }
 
     /**
+     * A `RATE_LIMITED` error with the hourly quota spent is the primary
+     * limit, which lasts until `X-RateLimit-Reset`; any other is treated as
+     * a secondary limit.
+     *
      * @param  array<int, mixed>  $errors
      */
-    private function graphqlException(array $errors, int $status): GitHubException
+    private function graphqlException(array $errors, int $status, ?int $remaining, ?int $reset): GitHubException
     {
         $first = is_array($errors[0] ?? null) ? $errors[0] : [];
 
         if ('RATE_LIMITED' === ($first['type'] ?? null)) {
+            if (0 === $remaining && null !== $reset) {
+                return GitHubRateLimitException::primary($status, max(1, $reset - Carbon::now()->getTimestamp()));
+            }
+
             return GitHubRateLimitException::secondary($status, self::DEFAULT_SECONDARY_WAIT);
         }
 

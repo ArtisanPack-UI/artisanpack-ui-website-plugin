@@ -138,14 +138,16 @@ final class ArtisanPackUIRoutes
             ->prefix('admin/artisanpack-ui')
             ->name('artisanpack-ui.')
             ->group(function (): void {
-                Route::middleware('permission:' . Permissions::SYNC)->group(function (): void {
+                Route::middleware('permission:' . Permissions::SETTINGS_MANAGE)->group(function (): void {
                     Route::name('settings.update')->put('settings', [SettingsController::class, 'update']);
 
                     Route::middleware('throttle:' . self::CONNECTION_TEST_LIMIT . ',1')->group(function (): void {
                         Route::name('settings.test-docs')->post('settings/test/docs', [SettingsController::class, 'testDocs']);
                         Route::name('settings.test-github')->post('settings/test/github', [SettingsController::class, 'testGitHub']);
                     });
+                });
 
+                Route::middleware('permission:' . Permissions::SYNC)->group(function (): void {
                     Route::prefix('sync')->name('sync.')->group(function (): void {
                         Route::middleware('throttle:' . self::SYNC_LIMIT . ',1')->group(function (): void {
                             Route::name('import')->post('import', [PackageSyncController::class, 'import']);

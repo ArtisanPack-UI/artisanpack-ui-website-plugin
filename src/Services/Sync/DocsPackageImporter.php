@@ -8,7 +8,9 @@ use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Services\Docs\DocsPackage;
 use ArtisanPackUI\Site\Services\Docs\DocsSiteClient;
 use ArtisanPackUI\Site\Support\PackageFields;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * "Sync from docs" (roadmap 2.1): the docs site owns which packages exist,
@@ -27,13 +29,47 @@ use Illuminate\Support\Carbon;
  * registry, registry name, GitHub repo). Title, content and excerpt are
  * never touched, and neither is a sync field an admin already set.
  *
+ * Imports hold {@see self::LOCK}, so the daily job, "Sync from docs" and
+ * "Sync now" never run one at the same time and create the same docs
+ * package twice. A caller that can't get the lock within ten seconds gets a
+ * {@see LockTimeoutException}.
+ *
  * @since 0.3.0
  */
 final class DocsPackageImporter
 {
+    public const LOCK = 'artisanpack-ui:sync:import';
+
+    /** Seconds the lock is held at most, should an import die holding it. */
+    private const LOCK_SECONDS = 300;
+
+    /** Seconds to wait for a running import to finish. */
+    private const LOCK_WAIT = 10;
+
     public function __construct(private readonly DocsSiteClient $docs) {}
 
+    /**
+     * @throws LockTimeoutException When another import is still running.
+     */
     public function import(): SyncReport
+    {
+        return Cache::lock(self::LOCK, self::LOCK_SECONDS)->block(self::LOCK_WAIT, fn (): SyncReport => $this->doImport());
+    }
+
+    /**
+     * Link one marketing package to its docs package and fill its empty
+     * sync fields, for its "Sync now" action. A linked package reads its
+     * own docs package; an unlinked one is matched by registry name. No
+     * package is created.
+     *
+     * @throws LockTimeoutException When another import is still running.
+     */
+    public function importOne(Package $package): SyncReport
+    {
+        return Cache::lock(self::LOCK, self::LOCK_SECONDS)->block(self::LOCK_WAIT, fn (): SyncReport => $this->doImportOne($package));
+    }
+
+    private function doImport(): SyncReport
     {
         $report = new SyncReport;
 
@@ -63,13 +99,7 @@ final class DocsPackageImporter
         return $report;
     }
 
-    /**
-     * Link one marketing package to its docs package and fill its empty
-     * sync fields, for its "Sync now" action. A linked package reads its
-     * own docs package; an unlinked one is matched by registry name. No
-     * package is created.
-     */
-    public function importOne(Package $package): SyncReport
+    private function doImportOne(Package $package): SyncReport
     {
         $report      = new SyncReport;
         $docsPackage = null === $package->docs_package_id
