@@ -12,7 +12,7 @@ namespace ArtisanPackUI\Site\Exceptions;
  * The client never sleeps and retries inside a web request; callers decide
  * whether to surface {@see self::$retryAfter} or release a queued job.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class GitHubRateLimitException extends GitHubException
 {

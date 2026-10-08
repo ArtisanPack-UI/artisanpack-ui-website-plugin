@@ -28,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property string|null  $latest_release
  * @property Carbon|null  $latest_release_at
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageStatSnapshot extends Model
 {

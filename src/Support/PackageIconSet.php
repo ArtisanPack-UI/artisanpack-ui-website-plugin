@@ -26,7 +26,7 @@ use RuntimeException;
  * reaches the sanitizer, as defense in depth: an icon never needs either,
  * and neither should ever reach an XML parser from a remote source.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class PackageIconSet
 {

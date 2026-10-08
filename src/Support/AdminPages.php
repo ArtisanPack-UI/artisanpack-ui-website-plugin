@@ -23,7 +23,7 @@ use Inertia\Response;
  *
  * @phpstan-type PageDefinition array{title: string, slug: string, parent: string|null, capability: string, order: int, action: array{class-string, string}}
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class AdminPages
 {

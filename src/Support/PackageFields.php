@@ -24,7 +24,7 @@ namespace ArtisanPackUI\Site\Support;
  *
  * @phpstan-type FieldDefinition array{key: string, name: string, type: string, column_type: string, description: string, order: int, options?: array<string, mixed>}
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class PackageFields
 {

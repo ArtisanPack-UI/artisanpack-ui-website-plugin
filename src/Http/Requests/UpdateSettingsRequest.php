@@ -24,7 +24,7 @@ use Illuminate\Validation\Validator;
  * {@see self::after()}). Otherwise anyone allowed to save settings could
  * point the stored token at a host they control.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class UpdateSettingsRequest extends FormRequest
 {

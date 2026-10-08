@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Route;
  * routed by Keystone's `AdminMenuManager` instead (see
  * {@see \ArtisanPackUI\Site\Support\AdminPages}).
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class ArtisanPackUIRoutes
 {

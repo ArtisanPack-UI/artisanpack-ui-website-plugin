@@ -16,7 +16,7 @@ namespace ArtisanPackUI\Site\Support;
  * `plans/roadmap.md`), so the picker UI is mounted by the plugin's boot
  * module next to that input and writes the same form value.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class IconPickerField
 {

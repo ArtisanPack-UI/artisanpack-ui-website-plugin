@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Http;
  * they return a {@see QueuedImport}, and the outcome shows up later on the
  * package's `imports` status.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 class DocsSiteClient
 {

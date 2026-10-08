@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null                            $last_checked_at
  * @property string|null                            $last_error
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class PackageSyncState extends Model
 {

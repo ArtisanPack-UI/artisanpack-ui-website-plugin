@@ -33,7 +33,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * content-type screen (see the 0.1 spike notes in `plans/roadmap.md`).
  * The endpoints behind those tabs enforce the same permissions server side.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class Permissions
 {

@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Http;
  * leading `v` is dropped): anything with a pre-release or dev suffix is
  * skipped, so a `2.0.0-beta.1` published after `1.4.0` never wins.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 class PackageRegistryClient
 {

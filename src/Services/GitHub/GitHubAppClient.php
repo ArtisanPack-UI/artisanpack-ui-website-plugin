@@ -40,7 +40,7 @@ use Illuminate\Support\Facades\Http;
  * A 401 on a cached installation token (revoked, or the App reinstalled)
  * drops the token and retries once with a fresh one.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 class GitHubAppClient
 {

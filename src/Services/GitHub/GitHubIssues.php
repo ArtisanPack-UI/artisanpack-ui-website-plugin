@@ -43,7 +43,7 @@ use League\CommonMark\Node\Inline\Text;
  *
  * @phpstan-type User array{login: string, avatarUrl: string|null}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class GitHubIssues
 {

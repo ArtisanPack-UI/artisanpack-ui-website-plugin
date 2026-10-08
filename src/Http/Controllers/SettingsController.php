@@ -22,7 +22,7 @@ use Inertia\Response;
  * The stored docs API token and GitHub private key never reach the browser.
  * The page only learns whether each is set.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class SettingsController
 {

@@ -32,7 +32,7 @@ use Illuminate\Support\Carbon;
  *
  * @phpstan-type RawBoard array{project: array{title: string, url: string, number: int}, status: array{projectId: string, fieldId: string, options: list<array{id: string, name: string, color: string|null}>}, nodes: list<array<string, mixed>>, repositories: list<string>, truncated: bool}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class ProjectBoardReader
 {

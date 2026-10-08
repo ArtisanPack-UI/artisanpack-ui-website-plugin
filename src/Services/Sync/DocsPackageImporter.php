@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Cache;
  * package twice. A caller that can't get the lock within ten seconds gets a
  * {@see LockTimeoutException}.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class DocsPackageImporter
 {

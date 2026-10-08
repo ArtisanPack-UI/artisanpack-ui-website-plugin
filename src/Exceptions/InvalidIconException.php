@@ -10,6 +10,6 @@ use RuntimeException;
  * An icon couldn't be stored or referenced: an invalid name, or SVG markup
  * that didn't survive sanitization. The message is written for an admin.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class InvalidIconException extends RuntimeException {}

@@ -9,7 +9,7 @@ use Modules\Users\Models\User;
 /**
  * "GitHub overview": stars, open issues and open PRs for each package.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class GitHubOverviewWidget extends StatsWidget
 {

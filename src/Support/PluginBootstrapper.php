@@ -31,7 +31,7 @@ use Throwable;
  * provider and the test suite both call these, so the suite runs against
  * the same wiring the plugin ships with.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class PluginBootstrapper
 {

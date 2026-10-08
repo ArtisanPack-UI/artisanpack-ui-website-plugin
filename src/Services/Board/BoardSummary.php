@@ -24,7 +24,7 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * @phpstan-type PackageRef array{id: int, title: string}
  * @phpstan-type Counts array{project: array{title: string, url: string}, columns: list<array{id: string|null, name: string}>, counts: array<string, array<string, int>>}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class BoardSummary
 {

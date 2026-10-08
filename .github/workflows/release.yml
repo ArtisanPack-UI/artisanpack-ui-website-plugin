@@ -12,10 +12,10 @@
 # assets are uploaded to it; otherwise a draft release is created with them,
 # ready for notes and publishing.
 #
-# Two jobs, so nothing that runs npm ever holds a write token: `build` checks
-# out without persisting credentials, builds with a read-only token and
-# uploads the ZIP as a workflow artifact; `release` only downloads that
-# artifact and runs `gh release`.
+# Two jobs, so nothing that runs Composer or npm ever holds a write token:
+# `build` checks out without persisting credentials, runs the test suite,
+# builds with a read-only token and uploads the ZIP as a workflow artifact;
+# `release` only downloads that artifact and runs `gh release`.
 name: Release
 
 on:
@@ -38,7 +38,8 @@ jobs:
             - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
               with:
                   php-version: '8.4'
-                  tools: none
+                  coverage: none
+                  tools: composer
 
             - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
               with:
@@ -65,6 +66,13 @@ jobs:
                       echo "::error::package.json version ${PACKAGE_VERSION} doesn't match plugin.json version ${PLUGIN_VERSION}"
                       exit 1
                   fi
+
+            # Never ship a release the test suite fails on.
+            - name: Install Composer dependencies
+              run: composer install --no-interaction --prefer-dist --no-progress
+
+            - name: Run the test suite
+              run: composer test
 
             - name: Build release ZIP
               run: OUT_DIR=build bin/build-release-zip.sh

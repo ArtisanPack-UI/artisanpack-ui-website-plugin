@@ -16,7 +16,7 @@ use Illuminate\Http\JsonResponse;
  * GitHub can't find (or the App can't see) the resource, and 422 for
  * anything else, including missing settings.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 trait RespondsToGitHubErrors
 {

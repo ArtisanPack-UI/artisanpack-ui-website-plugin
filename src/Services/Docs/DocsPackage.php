@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
  * name is derived from the slug ({@see self::registryName()}), and the repo
  * lives in the GitHub `docs_url` / `wiki_url` / `changelog_url` links.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class DocsPackage
 {

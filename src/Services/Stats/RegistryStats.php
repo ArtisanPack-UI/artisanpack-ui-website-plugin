@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
  * `illuminate/*` requirements; for npm, its `peerDependencies`. npm has no
  * dependents count, so `dependents` is null there.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class RegistryStats
 {

@@ -33,7 +33,7 @@ use Illuminate\Http\Request;
  * outcome, and its "Sync now" action, which runs all three steps for that
  * package alone through {@see PackageSyncRunner}.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class PackageSyncController
 {

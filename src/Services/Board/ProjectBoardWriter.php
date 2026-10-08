@@ -18,7 +18,7 @@ use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
  * issue's repo, which the board never edits. A successful move drops the
  * cached board, so the next load shows it.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class ProjectBoardWriter
 {

@@ -9,8 +9,8 @@
     "license": "MIT",
     "service_provider": "ArtisanPackUI\\Site\\ArtisanPackUIServiceProvider",
     "requires": {
-        "cms-framework": "^2.5",
-        "php": "^8.2"
+        "cms-framework": "^2.12",
+        "php": "^8.3"
     },
     "update": {
         "github": "ArtisanPack-UI/artisanpack-ui-website-plugin"
@@ -32,22 +32,8 @@
         "name": "artisanpack-ui",
         "entry": "dist/assets/remoteEntry.js",
         "exposes": [
-            "./boot",
             "./packages-board",
-            "./settings",
-            "./package-docs",
-            "./package-stats",
-            "./package-issues"
+            "./settings"
         ]
-    },
-    "nav": [
-        {
-            "slug": "artisanpack-ui",
-            "label": "ArtisanPack UI",
-            "url": "/admin/artisanpack-ui",
-            "icon": "artisanpackui-logo",
-            "permission": "artisanpack-ui.access",
-            "order": 60
-        }
-    ]
+    }
 }

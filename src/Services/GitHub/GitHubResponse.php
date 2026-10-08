@@ -8,7 +8,7 @@ namespace ArtisanPackUI\Site\Services\GitHub;
  * A successful GitHub REST or GraphQL response: the decoded body (for
  * GraphQL, just its `data`) plus the rate-limit headers GitHub sent with it.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class GitHubResponse
 {

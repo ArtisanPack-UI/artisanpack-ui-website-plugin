@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
  * One package's stats as collected right now: the registry half, the
  * GitHub half (either may be missing) and why any half couldn't be read.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageStats
 {

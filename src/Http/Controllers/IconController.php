@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
  * The icon picker field's catalog: the sets on offer and a page of icons
  * matching the search, each with its SVG for the preview.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class IconController
 {

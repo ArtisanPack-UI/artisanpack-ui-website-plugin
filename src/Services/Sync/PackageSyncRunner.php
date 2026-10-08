@@ -22,7 +22,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
  * registries. Its error is recorded against every package the run covers,
  * because none of them were fully synced.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageSyncRunner
 {

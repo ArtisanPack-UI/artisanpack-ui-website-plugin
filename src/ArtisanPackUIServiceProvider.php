@@ -85,11 +85,9 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         $this->registerAdminSurfaces();
         $this->registerRoutes();
         $this->registerFieldTypes();
-        $this->registerEditPanels();
         $this->registerDashboardWidgets();
         $this->registerContentTypes();
         $this->registerBlocks();
-        $this->registerHookSubscriptions();
     }
 
     /**
@@ -298,18 +296,6 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Register any content-edit sidebar panels the site needs. Left as an
-     * anchor for future additions — push into `ap.admin.contentEdit.panels`.
-     */
-    protected function registerEditPanels(): void
-    {
-        // addFilter( 'ap.admin.contentEdit.panels', function ( array $panels ): array {
-        //     $panels[] = [ ... ];
-        //     return $panels;
-        // } );
-    }
-
-    /**
      * Register the dashboard stats widgets (roadmap 4.3) and the board
      * widget (5.5) with the host's {@see AdminWidgetManager}. Each widget's
      * body is a component from the federated bundle, registered from `./boot` through
@@ -356,14 +342,5 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         VisualEditor::registerDynamicBlock(CopyCommandBlock::NAME, [
             'render' => $copyCommand->render(...),
         ]);
-    }
-
-    /**
-     * Subscribe to framework hooks. Left as an anchor for future additions —
-     * call `addAction()` / `addFilter()` for each subscription.
-     */
-    protected function registerHookSubscriptions(): void
-    {
-        // addAction( 'ap.contentTypes.created', static function ( $contentType ): void { ... } );
     }
 }

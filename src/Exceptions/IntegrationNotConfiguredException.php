@@ -10,7 +10,7 @@ use RuntimeException;
  * Thrown when an API client is used before its connection details are saved
  * on the plugin's Settings page. The message is safe to show an admin.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class IntegrationNotConfiguredException extends RuntimeException
 {

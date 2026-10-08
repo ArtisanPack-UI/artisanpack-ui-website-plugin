@@ -12,7 +12,7 @@ namespace ArtisanPackUI\Site\Services\Board;
  * Status field's options in the project's order. {@see self::forRepository()}
  * scopes the board to one package's repo for the Edit Package Issues tab.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class Board
 {

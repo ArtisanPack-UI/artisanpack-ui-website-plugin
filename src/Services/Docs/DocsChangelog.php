@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 /**
  * One changelog entry from `GET /packages/{package}/changelogs`.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class DocsChangelog
 {

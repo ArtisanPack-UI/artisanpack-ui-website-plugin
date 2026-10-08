@@ -10,7 +10,7 @@ use Modules\Users\Models\User;
  * "Release feed": the latest version of each package and when it was
  * released, newest first.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class ReleaseFeedWidget extends StatsWidget
 {

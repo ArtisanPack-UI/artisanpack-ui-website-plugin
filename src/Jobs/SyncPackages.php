@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Log;
  * {@see self::$timeout} seconds, so the queue connection's `retry_after`
  * must be longer than that or the job is handed out twice.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class SyncPackages implements ShouldBeUnique, ShouldQueue
 {

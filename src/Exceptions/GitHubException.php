@@ -13,7 +13,7 @@ use Throwable;
  * status (0 when GitHub was never reached) is kept for callers that branch
  * on it.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 class GitHubException extends RuntimeException
 {

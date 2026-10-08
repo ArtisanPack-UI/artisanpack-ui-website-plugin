@@ -16,7 +16,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * Limits follow GitHub's: 256-character titles, 65,536-character bodies,
  * 50-character label names, 39-character logins and 10 assignees.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class UpdateIssueRequest extends FormRequest
 {

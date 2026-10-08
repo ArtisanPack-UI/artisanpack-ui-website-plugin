@@ -9,7 +9,7 @@ namespace ArtisanPackUI\Site\Services\Docs;
  * `GET /packages/{package}/documentation` returns it. `parent` is 0 for a
  * root, and siblings arrive ordered by `menu_order`.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class DocsDocumentation
 {

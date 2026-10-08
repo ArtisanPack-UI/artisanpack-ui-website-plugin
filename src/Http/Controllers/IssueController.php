@@ -18,7 +18,7 @@ use Illuminate\Http\Request;
  * Edits and comments are made by the GitHub App, so GitHub shows them as
  * the App's bot rather than the admin. The modal says so.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class IssueController
 {

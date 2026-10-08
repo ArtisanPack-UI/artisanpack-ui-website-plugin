@@ -19,7 +19,7 @@ use Illuminate\Http\Request;
  * Reads reuse a board read in the last {@see ProjectBoardReader::BOARD_TTL}
  * seconds unless the request asks for `?fresh=1` (the Refresh button).
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class BoardController
 {

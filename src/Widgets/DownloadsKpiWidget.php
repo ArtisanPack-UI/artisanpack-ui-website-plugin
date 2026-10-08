@@ -11,7 +11,7 @@ use Modules\Users\Models\User;
  * "Package downloads" KPI tile: total, monthly or daily downloads for every
  * package or one, like the host's `KpiTileWidget` and its `metric` option.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class DownloadsKpiWidget extends StatsWidget
 {

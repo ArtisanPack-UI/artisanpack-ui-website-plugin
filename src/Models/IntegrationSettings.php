@@ -29,7 +29,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $github_organization
  * @property int|null    $github_project_number
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class IntegrationSettings extends Model
 {

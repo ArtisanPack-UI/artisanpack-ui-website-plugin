@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Log;
  * of packages that no longer exist, which have no foreign key to cascade
  * them away.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class CollectPackageStats implements ShouldBeUnique, ShouldQueue
 {
