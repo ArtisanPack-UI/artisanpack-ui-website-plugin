@@ -6,10 +6,16 @@
 # falls back to GitHub's source zipball, which has no built dist/ — the admin
 # bundle would be missing on the live site. So every release needs this job.
 #
-# Flow: bump `version` in plugin.json, merge, then push a `vX.Y.Z` tag. If a
+# Flow: bump `version` in plugin.json and package.json (and package-lock.json
+# via `npm install --package-lock-only`), merge, then push a `vX.Y.Z` tag. If a
 # release for the tag already exists (e.g. drafted with notes in the UI), the
 # assets are uploaded to it; otherwise a draft release is created with them,
 # ready for notes and publishing.
+#
+# Two jobs, so nothing that runs npm ever holds a write token: `build` checks
+# out without persisting credentials, builds with a read-only token and
+# uploads the ZIP as a workflow artifact; `release` only downloads that
+# artifact and runs `gh release`.
 name: Release
 
 on:
@@ -17,14 +23,17 @@ on:
         tags:
             - 'v*.*.*'
 
-permissions:
-    contents: write
+permissions: {}
 
 jobs:
-    release-zip:
+    build:
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
         steps:
             - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  persist-credentials: false
 
             - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
               with:
@@ -60,9 +69,30 @@ jobs:
             - name: Build release ZIP
               run: OUT_DIR=build bin/build-release-zip.sh
 
+            - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: release-zip
+                  path: |
+                      build/*.zip
+                      build/*.zip.sha256
+                  if-no-files-found: error
+                  retention-days: 7
+
+    release:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+              with:
+                  name: release-zip
+                  path: build
+
             - name: Attach to GitHub release
               env:
                   GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
               run: |
                   if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
                       gh release upload "${GITHUB_REF_NAME}" build/*.zip build/*.zip.sha256 --clobber

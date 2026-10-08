@@ -18,6 +18,7 @@ final class Board
 {
     /**
      * @param  list<BoardItem>  $items
+     * @param  bool             $truncated  The project has more items than a read pages through.
      */
     public function __construct(
         public readonly string $title,
@@ -25,6 +26,7 @@ final class Board
         public readonly int $number,
         public readonly ProjectStatusField $status,
         public readonly array $items,
+        public readonly bool $truncated = false,
     ) {}
 
     /**
@@ -41,13 +43,14 @@ final class Board
             $this->number,
             $this->status,
             array_values(array_filter($this->items, static fn (BoardItem $item): bool => strtolower($item->repo) === $repo)),
+            $this->truncated,
         );
     }
 
     /**
      * The board for the admin UI, with the filter choices its items offer.
      *
-     * @return array{project: array{title: string, url: string, number: int}, columns: list<array{id: string|null, name: string, color: string|null}>, items: list<array<string, mixed>>, milestones: list<string>, labels: list<array{name: string, color: string}>, packages: list<array{id: int, title: string}>}
+     * @return array{project: array{title: string, url: string, number: int}, columns: list<array{id: string|null, name: string, color: string|null}>, items: list<array<string, mixed>>, milestones: list<string>, labels: list<array{name: string, color: string}>, packages: list<array{id: int, title: string}>, truncated: bool}
      */
     public function toArray(): array
     {
@@ -83,6 +86,7 @@ final class Board
             'milestones' => array_values($milestones),
             'labels'     => array_values($labels),
             'packages'   => array_values($packages),
+            'truncated'  => $this->truncated,
         ];
     }
 }

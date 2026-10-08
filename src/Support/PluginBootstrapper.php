@@ -10,11 +10,14 @@ use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
 use Throwable;
@@ -22,7 +25,8 @@ use Throwable;
 /**
  * The host-independent parts of {@see ArtisanPackUIServiceProvider}: the
  * container bindings, the Gate ability, the shared Inertia prop, the
- * `apui` icon set and the daily scheduled jobs. The
+ * `apui` icon set, the daily scheduled jobs and the clean-up when the
+ * plugin is deleted. The
  * provider and the test suite both call these, so the suite runs against
  * the same wiring the plugin ships with.
  *
@@ -70,6 +74,44 @@ final class PluginBootstrapper
 
         self::registerIconSet($app);
         self::registerSchedule($app);
+        self::registerDeletePurge();
+    }
+
+    /**
+     * Remove what the plugin keeps outside its own tables when Keystone
+     * deletes it: the stored credentials (encrypted, but still the docs API
+     * token and the App private key), the cached installation token and
+     * the mirrored `apui` icons.
+     *
+     * The framework's migration rollback is meant to drop the plugin's
+     * tables, but `migrate:rollback --path` only reverts the last global
+     * batch, so the settings row is cleared here rather than trusting it.
+     * The `package` content type, its records and its custom fields stay:
+     * they are site content, not plugin state.
+     *
+     * Runs from `ap.cmsFramework.plugin.deleting`, which only fires in a
+     * request where the plugin booted, i.e. when it is deleted while active.
+     *
+     * @since 1.0.0
+     */
+    public static function purgeOnDelete(string $slug): void
+    {
+        if (AdminPages::SLUG !== $slug || ! Schema::hasTable('artisanpack_ui_settings')) {
+            return;
+        }
+
+        app(GitHubAppClient::class)->forgetInstallationToken();
+        IntegrationSettings::query()->delete();
+        File::deleteDirectory(PackageIconSet::defaultDirectory());
+    }
+
+    private static function registerDeletePurge(): void
+    {
+        if (! function_exists('addAction')) {
+            return;
+        }
+
+        addAction('ap.cmsFramework.plugin.deleting', self::purgeOnDelete(...));
     }
 
     /**

@@ -6,6 +6,7 @@ namespace ArtisanPackUI\Site\Jobs;
 
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageStatSnapshot;
+use ArtisanPackUI\Site\Models\PackageSyncState;
 use ArtisanPackUI\Site\Services\Stats\PackageStatsCollector;
 use Illuminate\Bus\Queueable;
 use Illuminate\Console\Scheduling\Schedule;
@@ -26,7 +27,9 @@ use Illuminate\Support\Facades\Log;
  * gap rather than zeroes.
  *
  * Runs after {@see SyncPackages} so a newly synced registry name or repo
- * is already in place.
+ * is already in place. Each run also drops the snapshots and sync state
+ * of packages that no longer exist, which have no foreign key to cascade
+ * them away.
  *
  * @since 0.4.0
  */
@@ -57,6 +60,8 @@ final class CollectPackageStats implements ShouldQueue
 
     public function handle(PackageStatsCollector $collector): void
     {
+        self::purgeOrphans();
+
         $today    = Carbon::today();
         $problems = [];
 
@@ -77,5 +82,16 @@ final class CollectPackageStats implements ShouldQueue
         if ([] !== $problems) {
             Log::warning('ArtisanPack UI daily stats snapshot finished with problems.', ['problems' => $problems]);
         }
+    }
+
+    /**
+     * Delete snapshots and sync state left behind by deleted packages.
+     *
+     * @since 1.0.0
+     */
+    private static function purgeOrphans(): void
+    {
+        PackageStatSnapshot::query()->whereNotIn('package_id', Package::query()->select('id'))->delete();
+        PackageSyncState::query()->whereNotIn('package_id', Package::query()->select('id'))->delete();
     }
 }

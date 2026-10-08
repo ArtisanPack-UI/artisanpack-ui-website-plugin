@@ -7,6 +7,7 @@ namespace ArtisanPackUI\Site\Services\Docs;
 use ArtisanPackUI\Site\Exceptions\DocsSiteException;
 use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -24,8 +25,10 @@ use Illuminate\Support\Facades\Http;
  * `{package}` accepts the docs site's numeric id or its slug: the docs site
  * resolves an all-digit value as an id and anything else as a slug.
  *
- * Redirects are refused, so the token only ever goes to the base URL the
- * Settings page validated (see {@see \ArtisanPackUI\Site\Support\OutboundUrlPolicy}).
+ * Redirects are refused, and every request re-checks the base URL against
+ * {@see OutboundUrlPolicy} and pins the connection to the address it
+ * vetted, so the token only ever goes to a public host, even if the URL's
+ * DNS changed since it was saved.
  *
  * Import triggers are queued on the docs site and answer `202 Accepted`;
  * they return a {@see QueuedImport}, and the outcome shows up later on the
@@ -215,12 +218,45 @@ class DocsSiteClient
             throw IntegrationNotConfiguredException::docsSite();
         }
 
-        return Http::baseUrl($this->settings->docsBaseUrl() . '/api/v1')
+        $baseUrl = (string) $this->settings->docsBaseUrl();
+
+        ['problem' => $problem, 'ips' => $ips] = OutboundUrlPolicy::resolve($baseUrl, app()->isLocal());
+
+        if (null !== $problem) {
+            throw new DocsSiteException(__('The docs site URL can\'t be called: :problem', ['problem' => $problem]));
+        }
+
+        $request = Http::baseUrl($baseUrl . '/api/v1')
             ->withToken((string) $this->settings->docs_api_token)
             ->acceptJson()
             ->withoutRedirecting()
             ->connectTimeout(5)
             ->timeout(20);
+
+        $pin = self::resolvePin($baseUrl, $ips);
+
+        return null === $pin ? $request : $request->withOptions(['curl' => [CURLOPT_RESOLVE => [$pin]]]);
+    }
+
+    /**
+     * The `CURLOPT_RESOLVE` entry pinning the base URL's host to the first
+     * vetted address, or null when there is nothing to pin (local
+     * development, or a host that is already an IP).
+     *
+     * @param  list<string>  $ips
+     */
+    private static function resolvePin(string $baseUrl, array $ips): ?string
+    {
+        $host = trim((string) parse_url($baseUrl, PHP_URL_HOST), '[]');
+
+        if ([] === $ips || '' === $host || false !== filter_var($host, FILTER_VALIDATE_IP)) {
+            return null;
+        }
+
+        $port = parse_url($baseUrl, PHP_URL_PORT) ?? ('https' === strtolower((string) parse_url($baseUrl, PHP_URL_SCHEME)) ? 443 : 80);
+        $ip   = str_contains($ips[0], ':') ? '[' . $ips[0] . ']' : $ips[0];
+
+        return "{$host}:{$port}:{$ip}";
     }
 
     /**

@@ -212,6 +212,9 @@ The PHP side is unchanged: `AdminWidgetManager::register()` with a `KeystoneAdmi
 
 ## Phase 6 — Command Center API
 
+**Deferred to post-1.0 (#23–#25).** The 1.0 release ships without it, and
+without the `artisanpack-ui.api-tokens.manage` permission it would need.
+
 ### 6.1 [plugin] Scoped API tokens
 - Issue and rotate tokens from plugin settings. Tokens are hashed at rest and shown once.
 - Abilities: `posts:read`, `packages:read`, `stats:read`, `boards:read`. An ability middleware enforces them, and requests are rate limited.

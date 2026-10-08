@@ -92,6 +92,14 @@ final class ArtisanPackUIRoutes
     public const BOARD_LIMIT = 60;
 
     /**
+     * Requests per minute, per user, to the two board reads, counted apart
+     * from {@see self::BOARD_LIMIT}. An uncached read pages through the
+     * whole project, up to 30 GraphQL queries, so this keeps one admin from
+     * spending the App's hourly quota for everyone.
+     */
+    public const BOARD_READ_LIMIT = 20;
+
+    /**
      * The `{package}` placeholder in the per-package endpoint templates
      * shared with the Edit Package screen, which the bundle swaps for the
      * record's id.
@@ -168,11 +176,16 @@ final class ArtisanPackUIRoutes
                 });
 
                 // The kanban boards and the issue modal.
+                Route::middleware('permission:' . Permissions::ISSUES_MANAGE)->group(function (): void {
+                    Route::middleware('throttle:' . self::BOARD_READ_LIMIT . ',1,artisanpack-ui-board-read')->group(function (): void {
+                        Route::name('board')->get('board', [BoardController::class, 'index']);
+                        Route::name('packages.board')->get('packages/{package}/board', [BoardController::class, 'package']);
+                    });
+                });
+
                 Route::middleware(['permission:' . Permissions::ISSUES_MANAGE, 'throttle:' . self::BOARD_LIMIT . ',1'])->group(function (): void {
-                    Route::name('board')->get('board', [BoardController::class, 'index']);
                     Route::name('board.move')->put('board/items/{item}/status', [BoardController::class, 'move'])
                         ->where('item', BoardController::ITEM_ID_PATTERN);
-                    Route::name('packages.board')->get('packages/{package}/board', [BoardController::class, 'package']);
 
                     Route::prefix('issues/{repo}')->name('issues.')->where(['repo' => '[A-Za-z0-9._-]+'])->group(function (): void {
                         Route::name('options')->get('options', [IssueController::class, 'options']);

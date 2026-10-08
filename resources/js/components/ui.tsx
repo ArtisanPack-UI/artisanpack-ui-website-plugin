@@ -20,7 +20,7 @@ const NAV_ITEMS: { key: keyof Nav; label: string; ability?: keyof Abilities }[] 
     { key: 'settings', label: 'Settings', ability: 'sync' },
 ];
 
-const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: false, apiTokensManage: false };
+const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: false };
 
 /**
  * The current user's plugin abilities from the `artisanpackUi.can` prop the

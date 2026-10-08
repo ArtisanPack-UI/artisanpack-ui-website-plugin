@@ -158,6 +158,31 @@ describe('project reader', function (): void {
         expect(array_map(fn ($item) => $item->id, app(ProjectBoardReader::class)->read()->items))->toBe(['PVTI_issue']);
     });
 
+    it('says when the project has more items than a read pages through', function (): void {
+        $pages = array_map(
+            fn (int $page): array => projectPage([projectIssue("PVTI_{$page}", 'ArtisanPack-UI/a', $page)], "cursor-{$page}"),
+            range(1, ProjectBoardReader::MAX_PAGES),
+        );
+        fakeGitHubGraphql($pages);
+
+        $board = app(ProjectBoardReader::class)->read();
+
+        expect($board->truncated)->toBeTrue()
+            ->and($board->items)->toHaveCount(ProjectBoardReader::MAX_PAGES)
+            ->and($board->toArray()['truncated'])->toBeTrue();
+    });
+
+    it('leaves out issues from repos outside the org', function (): void {
+        $page = projectPage([
+            projectIssue('PVTI_org', 'ArtisanPack-UI/accessibility', 1),
+            projectIssue('PVTI_other', 'someone-else/accessibility', 5),
+        ]);
+        fakeGitHubGraphql([$page, $page]);
+
+        expect(array_map(fn ($item) => $item->id, app(ProjectBoardReader::class)->read()->items))->toBe(['PVTI_org'])
+            ->and(app(BoardSummary::class)->summarize([])['total'])->toBe(1);
+    });
+
     it('refuses a project without a single-select Status field', function (): void {
         $page                                               = projectPage([]);
         $page['data']['organization']['projectV2']['field'] = null;
@@ -234,6 +259,43 @@ describe('board endpoints', function (): void {
             ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'no GitHub repo'));
 
         Http::assertNothingSent();
+    });
+
+    it('reuses a recent read instead of paging through the project again', function (): void {
+        fakeGitHubGraphql([projectPage([]), projectPage([])]);
+
+        $this->getJson('/admin/artisanpack-ui/board')->assertOk();
+        $this->getJson('/admin/artisanpack-ui/board')->assertOk();
+
+        Http::assertSentCount(2);
+
+        $this->getJson('/admin/artisanpack-ui/board?fresh=1')->assertOk();
+
+        Http::assertSentCount(3);
+    });
+
+    it('reads the project again after a card moves', function (): void {
+        fakeGitHubGraphql([
+            projectPage([]),
+            ['data' => ['updateProjectV2ItemFieldValue' => ['projectV2Item' => ['id' => 'PVTI_1']]]],
+            projectPage([]),
+        ]);
+
+        $this->getJson('/admin/artisanpack-ui/board')->assertOk();
+        $this->putJson('/admin/artisanpack-ui/board/items/PVTI_1/status', ['status' => 'opt-doing'])->assertOk();
+        $this->getJson('/admin/artisanpack-ui/board')->assertOk();
+
+        Http::assertSentCount(4);
+    });
+
+    it('limits board reads separately from writes', function (): void {
+        fakeGitHubGraphql([projectPage([])]);
+
+        foreach (range(1, 20) as $attempt) {
+            $this->getJson('/admin/artisanpack-ui/board')->assertOk();
+        }
+
+        $this->getJson('/admin/artisanpack-ui/board')->assertTooManyRequests();
     });
 
     it('shares the board endpoint templates with every admin page', function (): void {

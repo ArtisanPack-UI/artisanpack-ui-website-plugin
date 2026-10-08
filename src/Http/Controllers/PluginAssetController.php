@@ -21,6 +21,11 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  * check before anything is streamed. Anything that escapes the directory,
  * doesn't exist, or isn't a regular file 404s.
  *
+ * Only the file types the build emits ({@see self::CONTENT_TYPES}) are
+ * served, each with an explicit Content-Type and `X-Content-Type-Options:
+ * nosniff`; anything else 404s rather than falling back to a guessed MIME
+ * type, so a stray file in `dist/assets/` can never be served as HTML.
+ *
  * Cache-Control splits by filename: everything except `remoteEntry.js` is
  * content-hashed by Vite and safe to serve `immutable`; `remoteEntry.js` is
  * the stable-URL federation manifest and gets `no-cache` + ETag revalidation
@@ -66,6 +71,11 @@ final class PluginAssetController
         }
 
         $extension = strtolower(pathinfo($requested, PATHINFO_EXTENSION));
+
+        if (! isset(self::CONTENT_TYPES[$extension])) {
+            abort(404);
+        }
+
         $isEntry = basename($requested) === 'remoteEntry.js';
 
         $cacheControl = $isEntry
@@ -73,7 +83,9 @@ final class PluginAssetController
             : 'public, max-age=31536000, immutable';
 
         $response = response()->file($requested, [
-            'Cache-Control' => $cacheControl,
+            'Cache-Control'          => $cacheControl,
+            'Content-Type'           => self::CONTENT_TYPES[$extension],
+            'X-Content-Type-Options' => 'nosniff',
         ]);
 
         if ($isEntry) {
@@ -83,10 +95,6 @@ final class PluginAssetController
             if ($response->isNotModified($request)) {
                 return $response;
             }
-        }
-
-        if (isset(self::CONTENT_TYPES[$extension])) {
-            $response->headers->set('Content-Type', self::CONTENT_TYPES[$extension]);
         }
 
         return $response;

@@ -164,8 +164,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                 <section className={CARD_CLASS}>
                     <h2 className="text-base font-semibold text-base-content">GitHub App</h2>
                     <p className="mt-1 text-sm text-base-content/60">
-                        The GitHub App installed on the org. Stats, the boards and the Command Center API read and
-                        write GitHub through it.
+                        The GitHub App installed on the org. Stats and the boards read and write GitHub through it.
                     </p>
 
                     <div className="mt-5 grid gap-4 md:grid-cols-2">

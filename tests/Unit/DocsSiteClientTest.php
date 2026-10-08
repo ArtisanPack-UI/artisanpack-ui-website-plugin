@@ -174,3 +174,23 @@ it('does not follow redirects away from the docs site', function (): void {
 
     Http::assertSentCount(1);
 });
+
+it('re-checks the saved URL before every request', function (string $url): void {
+    Http::fake();
+
+    // Inserted directly, as a row saved before the policy tightened would be.
+    IntegrationSettings::query()->insert([
+        'docs_base_url'  => $url,
+        'docs_api_token' => encrypt('secret-token', false),
+        'created_at'     => now(),
+        'updated_at'     => now(),
+    ]);
+
+    expect(fn () => app(DocsSiteClient::class)->packages())->toThrow(DocsSiteException::class);
+
+    Http::assertNothingSent();
+})->with([
+    'loopback ip'       => ['https://127.0.0.1'],
+    'loopback hostname' => ['https://localhost'],
+    'unresolvable'      => ['https://nonexistent.invalid'],
+]);

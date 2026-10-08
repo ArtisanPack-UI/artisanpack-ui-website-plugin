@@ -85,8 +85,11 @@ if [[ -z "${SKIP_BUILD:-}" ]]; then
         exit 1
     fi
 
-    echo "→ Building the federated bundle (npm ci && npm run build)"
-    npm ci --no-audit --no-fund
+    # --ignore-scripts: no dependency's install hooks run during a release
+    # build. Vite and esbuild ship their binaries as optional dependencies,
+    # so the bundle builds without them.
+    echo "→ Building the federated bundle (npm ci --ignore-scripts && npm run build)"
+    npm ci --ignore-scripts --no-audit --no-fund
     npm run build
 fi
 

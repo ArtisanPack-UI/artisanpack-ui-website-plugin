@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use ArtisanPackUI\Site\Support\Permissions;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -71,6 +72,71 @@ it('keeps a stored secret when the field is left blank', function (): void {
 
     expect(IntegrationSettings::current()->docs_api_token)->toBe('docs-token')
         ->and(IntegrationSettings::current()->github_private_key)->toBe(testPrivateKey());
+});
+
+it('requires the API token again when the docs site URL moves to another host', function (): void {
+    IntegrationSettings::create(validSettings());
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_base_url' => 'https://attacker.example.invalid', 'docs_api_token' => '']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['docs_api_token' => 'Re-enter the API token when you change the docs site URL.']);
+
+    $settings = IntegrationSettings::current();
+    expect($settings->docsBaseUrl())->toBe('https://docs.example.invalid')
+        ->and($settings->docs_api_token)->toBe('docs-token');
+});
+
+it('accepts a new docs site host with a new API token', function (): void {
+    IntegrationSettings::create(validSettings());
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_base_url' => 'https://docs2.example.invalid', 'docs_api_token' => 'new-token']))
+        ->assertOk();
+
+    expect(IntegrationSettings::current()->docs_api_token)->toBe('new-token');
+});
+
+it('keeps the API token when the docs site URL keeps its origin', function (string $url): void {
+    IntegrationSettings::create(validSettings());
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_base_url' => $url, 'docs_api_token' => '']))
+        ->assertOk();
+
+    expect(IntegrationSettings::current()->docs_api_token)->toBe('docs-token');
+})->with([
+    'same url'       => ['https://docs.example.invalid'],
+    'trailing slash' => ['https://docs.example.invalid/'],
+]);
+
+it('requires the private key again when the App or installation ID changes', function (string $key): void {
+    IntegrationSettings::create(validSettings());
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings([$key => '555', 'github_private_key' => '']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('github_private_key');
+})->with(['github_app_id', 'github_installation_id']);
+
+it('drops the cached installation token when the App credentials change', function (): void {
+    IntegrationSettings::create(validSettings());
+    $tokenKey = 'artisanpack-ui:github:installation-token:' . sha1('123456|987654');
+    Cache::put($tokenKey, 'cached', 600);
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_api_token' => '', 'github_private_key' => '']))->assertOk();
+    expect(Cache::has($tokenKey))->toBeTrue();
+
+    openssl_pkey_export(openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]), $newKey);
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_api_token' => '', 'github_private_key' => $newKey]))->assertOk();
+    expect(Cache::has($tokenKey))->toBeFalse();
+});
+
+it('drops the cached Status field when the project changes', function (): void {
+    IntegrationSettings::create(validSettings());
+    $statusKey = 'artisanpack-ui:board:status-field:' . sha1('artisanpack-ui|3');
+    Cache::put($statusKey, ['projectId' => 'p', 'fieldId' => 'f', 'options' => []], 600);
+
+    $this->putJson('/admin/artisanpack-ui/settings', validSettings(['docs_api_token' => '', 'github_project_number' => 4]))->assertOk();
+
+    expect(Cache::has($statusKey))->toBeFalse();
 });
 
 it('clears a stored secret on request', function (): void {
@@ -166,6 +232,10 @@ it('refuses a docs site URL the server must not call', function (string $url): v
     'private range' => ['https://10.0.0.5'],
     'metadata'      => ['https://169.254.169.254'],
     'localhost'     => ['https://localhost'],
+    'nat64'         => ['https://[64:ff9b::7f00:1]/'],
+    'cgnat'         => ['https://100.64.0.1/'],
+    'ipv4-mapped'   => ['https://[::ffff:127.0.0.1]/'],
+    'unresolvable'  => ['https://nonexistent.invalid/'],
 ]);
 
 it('allows http and loopback docs URLs in local development', function (): void {

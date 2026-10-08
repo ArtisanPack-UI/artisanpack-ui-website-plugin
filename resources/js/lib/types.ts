@@ -20,7 +20,6 @@ export interface Abilities {
     sync: boolean;
     issuesManage: boolean;
     statsView: boolean;
-    apiTokensManage: boolean;
 }
 
 /**
