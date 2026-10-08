@@ -379,3 +379,16 @@ export interface TopPackagesData {
 export interface ReleaseFeedData {
     releases: (PackageRef & { version: string; releasedAt: string | null })[];
 }
+
+export interface BoardWidgetData {
+    project: { title: string; url: string } | null;
+    /** The Status columns in board order, "No status" (id null) first. */
+    columns: (Pick<BoardColumn, 'id' | 'name'> & { count: number })[];
+    total: number;
+    /** The packages counted; empty counts every card. */
+    packages: PackageRef[];
+    /** The global board, filtered to the same packages. */
+    boardUrl: string;
+    /** Why the project couldn't be read, e.g. GitHub isn't set up. */
+    error: string | null;
+}

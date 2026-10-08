@@ -28,6 +28,7 @@ use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
+use ArtisanPackUI\Site\Widgets\BoardWidget;
 use ArtisanPackUI\Site\Widgets\DownloadsKpiWidget;
 use ArtisanPackUI\Site\Widgets\DownloadsTrendWidget;
 use ArtisanPackUI\Site\Widgets\GitHubOverviewWidget;
@@ -288,9 +289,9 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Register the dashboard stats widgets (roadmap 4.3) with the host's
-     * {@see AdminWidgetManager}. Each widget's body is a component from the
-     * federated bundle, registered from `./boot` through
+     * Register the dashboard stats widgets (roadmap 4.3) and the board
+     * widget (5.5) with the host's {@see AdminWidgetManager}. Each widget's
+     * body is a component from the federated bundle, registered from `./boot` through
      * `keystone.admin.dashboard.widget.registerFederated` under the
      * widget's `extendedInfo()['component']` key; the two must match.
      *
@@ -311,6 +312,7 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         $widgets->register(self::SLUG . '.gitHubOverview', GitHubOverviewWidget::class);
         $widgets->register(self::SLUG . '.topPackages', TopPackagesWidget::class);
         $widgets->register(self::SLUG . '.releaseFeed', ReleaseFeedWidget::class);
+        $widgets->register(self::SLUG . '.board', BoardWidget::class);
     }
 
     /**
