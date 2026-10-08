@@ -1,0 +1,110 @@
+# Builds the distributable plugin ZIP on version tags and attaches it to the
+# GitHub release.
+#
+# Keystone's GitHub update source installs the release's `.zip` asset and
+# verifies it against the matching `.zip.sha256` sidecar. Without the asset it
+# falls back to GitHub's source zipball, which has no built dist/ — the admin
+# bundle would be missing on the live site. So every release needs this job.
+#
+# Flow: bump `version` in plugin.json and package.json (and package-lock.json
+# via `npm install --package-lock-only`), merge, then push a `vX.Y.Z` tag. If a
+# release for the tag already exists (e.g. drafted with notes in the UI), the
+# assets are uploaded to it; otherwise a draft release is created with them,
+# ready for notes and publishing.
+#
+# Two jobs, so nothing that runs Composer or npm ever holds a write token:
+# `build` checks out without persisting credentials, runs the test suite,
+# builds with a read-only token and uploads the ZIP as a workflow artifact;
+# `release` only downloads that artifact and runs `gh release`.
+name: Release
+
+on:
+    push:
+        tags:
+            - 'v*.*.*'
+
+permissions: {}
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  persist-credentials: false
+
+            - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+              with:
+                  php-version: '8.4'
+                  coverage: none
+                  tools: composer
+
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+              with:
+                  node-version: '22'
+                  cache: npm
+
+            # The ZIP is named after plugin.json's version, so the tag has to
+            # match it or the release would carry a mislabeled archive.
+            - name: Check tag matches plugin.json version
+              run: |
+                  VERSION="$(php -r 'echo json_decode(file_get_contents("plugin.json"), true)["version"] ?? "";')"
+                  if [ "v${VERSION}" != "${GITHUB_REF_NAME}" ]; then
+                      echo "::error::Tag ${GITHUB_REF_NAME} doesn't match plugin.json version ${VERSION}"
+                      exit 1
+                  fi
+
+            # package.json carries the same version; a mismatch means the
+            # bump was only half done.
+            - name: Check package.json matches plugin.json version
+              run: |
+                  PLUGIN_VERSION="$(php -r 'echo json_decode(file_get_contents("plugin.json"), true)["version"] ?? "";')"
+                  PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+                  if [ "${PACKAGE_VERSION}" != "${PLUGIN_VERSION}" ]; then
+                      echo "::error::package.json version ${PACKAGE_VERSION} doesn't match plugin.json version ${PLUGIN_VERSION}"
+                      exit 1
+                  fi
+
+            # Never ship a release the test suite fails on.
+            - name: Install Composer dependencies
+              run: composer install --no-interaction --prefer-dist --no-progress
+
+            - name: Run the test suite
+              run: composer test
+
+            - name: Build release ZIP
+              run: OUT_DIR=build bin/build-release-zip.sh
+
+            - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: release-zip
+                  path: |
+                      build/*.zip
+                      build/*.zip.sha256
+                  if-no-files-found: error
+                  retention-days: 7
+
+    release:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+              with:
+                  name: release-zip
+                  path: build
+
+            - name: Attach to GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+              run: |
+                  if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+                      gh release upload "${GITHUB_REF_NAME}" build/*.zip build/*.zip.sha256 --clobber
+                  else
+                      gh release create "${GITHUB_REF_NAME}" build/*.zip build/*.zip.sha256 \
+                          --draft --verify-tag --title "${GITHUB_REF_NAME}" --generate-notes
+                  fi

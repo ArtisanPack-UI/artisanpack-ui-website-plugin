@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+
+# Dependencies
+/node_modules/
+
+# Build output — `npm run build` produces the federated bundle
+/dist/
+
+# Composer (dev-only: the Testbench suite)
+/vendor/

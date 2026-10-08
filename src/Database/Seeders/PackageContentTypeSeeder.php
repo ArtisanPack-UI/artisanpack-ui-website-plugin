@@ -9,6 +9,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
 use Modules\ContentModel\Support\ContentTypeTables;
 use RuntimeException;
 
@@ -17,7 +18,8 @@ use RuntimeException;
  * `packages` records table — the same two-phase flow the Content Model
  * admin runs when a human creates a type through the UI (see
  * {@see \Modules\ContentModel\Http\Controllers\ContentTypeController::store()}
- * and its `ensureRecordsTable()` helper).
+ * and its `ensureRecordsTable()` helper) — then registers the package
+ * custom fields (see {@see \ArtisanPackUI\Site\Support\PackageFields}).
  *
  * Idempotent — safe to re-run.
  */
@@ -26,7 +28,7 @@ final class PackageContentTypeSeeder extends Seeder
     private const SLUG    = 'package';
     private const SUPPORTS = ['title', 'editor', 'excerpt', 'featured_image'];
 
-    public function run(ContentTypeManager $manager): void
+    public function run(ContentTypeManager $manager, PackageFieldProvisioner $fields): void
     {
         $tableName = ContentTypeTables::derive(self::SLUG);
 
@@ -51,6 +53,8 @@ final class PackageContentTypeSeeder extends Seeder
         }
 
         $this->ensureRecordsTable($tableName, self::SUPPORTS);
+
+        $fields->provision($tableName);
     }
 
     /**

@@ -1,0 +1,45 @@
+{
+    "name": "artisanpack-ui/website-plugin",
+    "description": "Site-specific Keystone plugin for artisanpack-ui.dev.",
+    "type": "keystone-plugin",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jacob Martella",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-openssl": "*"
+    },
+    "require-dev": {
+        "artisanpack-ui/icons": "^2.1",
+        "artisanpack-ui/visual-editor": "^1.12",
+        "inertiajs/inertia-laravel": "^2.0|^3.0",
+        "orchestra/testbench": "^10.2|^11.0",
+        "pestphp/pest": "^3.8|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.2|^4.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "ArtisanPackUI\\Site\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ArtisanPackUI\\Site\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "./vendor/bin/pest"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

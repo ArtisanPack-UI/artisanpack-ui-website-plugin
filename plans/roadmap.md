@@ -52,6 +52,37 @@ the Command Center.
 - Expose these entries: `./packages-board`, `./settings`, plus the package-edit tabs below.
 - **Spike:** confirm a federated module can contribute (a) tabs or panels to the content edit screen through `ap.admin.contentEdit.panels`, and (b) the editor component for a custom field type, and (c) dashboard widget bodies through `keystone.admin.dashboard.widget.render`. Record the answer in this file before starting Phase 1.
 
+#### 0.1 spike findings
+
+Checked against the Keystone host as of October 2026. The package edit screen is the host's generic dynamic content-type screen (`admin/content-model/DynamicContentEdit`, rendered by `ContentTypeContentController::edit()`), not the Blog/Pages edit screens. That distinction drives (a) and (b).
+
+| Question | Answer | How |
+|---|---|---|
+| (a) Content-edit tabs/panels | **Yes, client side only** | See below. |
+| (b) Custom field type editor | **No, not on the package screen** | See below. |
+| (c) Dashboard widget bodies | **Yes** | See below. |
+
+**(a) Tabs and panels — yes, through the boot module.** The PHP filters (`ap.cmsFramework.admin.contentEdit.tabs` / `.panels`, which is what `ap.admin.contentEdit.panels` refers to) only reach the Blog and Pages edit screens. `ContentTypeContentController::edit()` never shares the `contentEdit` Inertia prop, so a server-side registration never reaches the package screen. Content Organizer hits the same gap. That screen still mounts `<AdminEditSlot slot="tabs">` (and the sidebar, before-editor and after-editor slots), and `AdminEditSlot` always runs the client-side `keystone.admin.panels.entries` filter, even over an empty seed. So the plugin's `./boot` module:
+
+1. adds entries to the `tabs` slot when `contentType === 'package'` (`keystone.admin.panels.entries`), and
+2. returns the React component for each entry's `component` identifier (`keystone.admin.panels.resolved`).
+
+This ships in 0.1 as placeholder **Docs**, **Stats** and **Issues** tabs. The fallback (a plugin page per package) isn't needed. Two caveats:
+- Capability gating has to happen client side, or inside the tab's own endpoints, because the host's server-side `capability` key never applies on this path. Phase 0.5 must account for this.
+- If Keystone later wires `PanelSlotSupport::payload()` into `ContentTypeContentController::edit()`, a server-side registration with the same slugs is deduplicated by the boot filter.
+
+**(b) Custom field editors — no on the package screen.** Blog and Pages render custom fields through `CustomFieldRenderer`, and plugins can supply an editor there through the `keystone.admin.customFields.registerType` filter. `DynamicContentEdit` ignores both: it renders **every** custom field as a plain `TextField`, and `fieldsPayload()` doesn't send `editor_component`. An `icon_picker` field type registered with `apRegisterFieldType()` would therefore show up as a raw JSON text input on Edit Package. Options for 1.2, in order of preference:
+1. A Keystone change so `DynamicContentEdit` renders fields through `CustomFieldRenderer` and the payload carries `editor_component`. This is the right fix, and it also helps every other dynamic type.
+2. Until then, ship the icon picker as an Edit Package sidebar panel (`sidebar-top` / `sidebar-bottom` through the same boot-module path as (a)) that reads and writes the `icon` value through a plugin endpoint, and hide the raw field.
+
+Answer this before 1.1/1.2, together with Open question 1.
+
+**(c) Dashboard widgets — yes.** There are two seams:
+- `keystone.admin.dashboard.widget.registerFederated` (action) registers a component against the host's widget registry under the key the PHP widget's `extendedInfo()['component']` names. The boot module can pass the component reference directly. This is the seam 4.3 and 5.5 should use, and Content Organizer already uses it for its widgets.
+- `keystone.admin.dashboard.widget.render` (filter) receives `(ReactNode, { widget, catalog })` and can wrap or replace any widget body. It suits decoration, but it isn't needed to register a widget.
+
+The PHP side is unchanged: `AdminWidgetManager::register()` with a `KeystoneAdminWidgetInterface` class.
+
 ### 0.2 [plugin] Settings screen
 - Docs site base URL and API token, stored encrypted.
 - GitHub App ID, private key and installation ID, plus the org Project number.
@@ -181,6 +212,9 @@ the Command Center.
 
 ## Phase 6 — Command Center API
 
+**Deferred to post-1.0 (#23–#25).** The 1.0 release ships without it, and
+without the `artisanpack-ui.api-tokens.manage` permission it would need.
+
 ### 6.1 [plugin] Scoped API tokens
 - Issue and rotate tokens from plugin settings. Tokens are hashed at rest and shown once.
 - Abilities: `posts:read`, `packages:read`, `stats:read`, `boards:read`. An ability middleware enforces them, and requests are rate limited.
@@ -221,8 +255,8 @@ the Command Center.
 
 ## Open questions
 
-1. **Custom field storage.** Keystone custom-field groups, or columns the plugin owns on `packages`? Answer this before 1.1.
-2. **Federated module reach.** Can the plugin's remote module render content-edit tabs and custom-field editor components? This is the 0.1 spike. If not, the Docs, Stats and Issues tabs move to a plugin page per package, linked from the edit screen.
+1. ~~**Custom field storage.**~~ Answered in 1.1: Keystone custom fields. On the dynamic content-type screen a custom field is a physical column on `packages` *plus* a `custom_fields` row, and the row is what makes the generic edit screen render, validate, save and send the column. Plugin-owned columns would be stripped from the edit payload. The plugin provisions the fields itself on boot (`Support/PackageFieldProvisioner`), adding each column outside a transaction because `CustomFieldManager::createField()` hits the MySQL implicit-commit trap.
+2. ~~**Federated module reach.**~~ Answered by the 0.1 spike (see **0.1 spike findings**): tabs yes, through the boot module; custom-field editors no on the package screen, pending a Keystone change.
 3. **GitHub App identity.** Comments and edits will appear as the App bot, not as the admin. Is that acceptable, or should comments carry an "on behalf of" prefix?
 4. **Rate limits on live proxying.** Admin and Command Center traffic both hit GitHub live. Add a short cache (30–60s) on the Command Center `boards` and `stats` endpoints if limits become a problem.
 5. **npm packages on the board.** Confirm that JS packages live in their own repos, or in a monorepo with a label convention, so the repo-to-package mapping holds.
