@@ -6,9 +6,9 @@
  * effects here bind against the host's shared hooks registry in time to be
  * read.
  *
- * Contributes the Docs, Stats and Issues tabs and the icon picker to the
- * `package` edit screen, and the "Sync from docs" button to the Packages
- * list.
+ * Contributes the Docs, Stats and Issues tabs, the sync status panel and
+ * the icon picker to the `package` edit screen, and the "Sync from docs"
+ * button to the Packages list.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
  * `contentEdit` Inertia prop, so `AdminEditSlot` seeds every slot with `[]`
@@ -40,6 +40,8 @@ interface PackageTab {
     title: string;
     component: string;
     order: number;
+    /** The edit-screen slot the entry goes in. */
+    slot: 'tabs' | 'sidebar-top';
     /** The plugin ability the tab needs (see `Support/Permissions.php`). */
     ability: keyof Abilities;
     load: () => Promise<{ default: ComponentType<PackageTabProps> }>;
@@ -47,10 +49,20 @@ interface PackageTab {
 
 const PACKAGE_TABS: PackageTab[] = [
     {
+        slug: 'artisanpack-ui.package-sync',
+        title: 'Docs site sync',
+        component: 'artisanpack-ui.PackageSyncPanel',
+        order: 10,
+        slot: 'sidebar-top',
+        ability: 'sync',
+        load: () => import('./panels/PackageSyncPanel'),
+    },
+    {
         slug: 'artisanpack-ui.package-docs',
         title: 'Docs',
         component: 'artisanpack-ui.PackageDocsTab',
         order: 10,
+        slot: 'tabs',
         ability: 'sync',
         load: () => import('./tabs/PackageDocsTab'),
     },
@@ -59,6 +71,7 @@ const PACKAGE_TABS: PackageTab[] = [
         title: 'Stats',
         component: 'artisanpack-ui.PackageStatsTab',
         order: 20,
+        slot: 'tabs',
         ability: 'statsView',
         load: () => import('./tabs/PackageStatsTab'),
     },
@@ -67,6 +80,7 @@ const PACKAGE_TABS: PackageTab[] = [
         title: 'Issues',
         component: 'artisanpack-ui.PackageIssuesTab',
         order: 30,
+        slot: 'tabs',
         ability: 'issuesManage',
         load: () => import('./tabs/PackageIssuesTab'),
     },
@@ -81,8 +95,8 @@ const PACKAGE_TABS: PackageTab[] = [
  * The ability check lives here, in the rendered tab, because the entries
  * filter below runs inside the host's render and can't read page props.
  * A user without the ability sees the tab with a notice instead of its
- * body, and never loads the body's chunk; the tab's endpoints enforce the
- * same permission server side.
+ * body (a sidebar panel is left out instead), and never loads the body's
+ * chunk; the tab's endpoints enforce the same permission server side.
  */
 function gated(tab: PackageTab): ComponentType<PackageTabProps> {
     const Lazy = lazy(tab.load);
@@ -91,7 +105,7 @@ function gated(tab: PackageTab): ComponentType<PackageTabProps> {
         const can = useAbilities();
 
         if (!can[tab.ability]) {
-            return <NoAccess title={tab.title} />;
+            return tab.slot === 'tabs' ? <NoAccess title={tab.title} /> : null;
         }
 
         return (
@@ -114,27 +128,32 @@ const TAB_COMPONENTS = new Map<string, ComponentType<PackageTabProps>>(
 );
 
 /**
- * Append the package tabs to the `tabs` slot on the `package` edit screen.
- * Entries another source already supplied (a future server-side
- * registration, a rerun of the filter) are not duplicated.
+ * Append the package tabs to the `tabs` slot, and the sync status panel to
+ * the `sidebar-top` slot, on the `package` edit screen. Entries another
+ * source already supplied (a future server-side registration, a rerun of
+ * the filter) are not duplicated.
  */
 addFilter('keystone.admin.panels.entries', (entries: unknown, context: unknown) => {
     const list = Array.isArray(entries) ? entries : [];
     const { slot, contentType } = (context ?? {}) as { slot?: string; contentType?: string };
 
-    if (slot !== 'tabs' || contentType !== PACKAGE_CONTENT_TYPE) {
+    if (contentType !== PACKAGE_CONTENT_TYPE) {
         return list;
     }
 
     const present = new Set(list.map((entry) => (entry as { slug?: unknown }).slug));
-    const additions = PACKAGE_TABS.filter((tab) => !present.has(tab.slug)).map((tab) => ({
+    const additions = PACKAGE_TABS.filter((tab) => tab.slot === slot && !present.has(tab.slug)).map((tab) => ({
         slug: tab.slug,
         title: tab.title,
         component: tab.component,
-        position: 'default',
+        position: tab.slot === 'sidebar-top' ? 'top' : 'default',
         order: tab.order,
         props: {},
     }));
+
+    if (additions.length === 0) {
+        return list;
+    }
 
     return [...list, ...additions].sort(
         (a, b) => ((a as { order?: number }).order ?? 50) - ((b as { order?: number }).order ?? 50),

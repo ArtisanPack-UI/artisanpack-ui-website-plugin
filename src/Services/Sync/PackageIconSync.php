@@ -56,6 +56,25 @@ final class PackageIconSync
         return $report;
     }
 
+    /**
+     * Sync one linked package's icon, for its "Sync now" action. An
+     * unlinked package is skipped.
+     */
+    public function syncOne(Package $package): SyncReport
+    {
+        $report = new SyncReport;
+
+        if (null === $package->docs_package_id) {
+            $report->skipped++;
+
+            return $report;
+        }
+
+        $this->syncPackage($package, $this->docs->package($package->docs_package_id), $report);
+
+        return $report;
+    }
+
     private function syncPackage(Package $package, DocsPackage $docsPackage, SyncReport $report): void
     {
         $label = $package->title ?: $docsPackage->name;
@@ -69,14 +88,14 @@ final class PackageIconSync
         try {
             $synced = $this->iconRef($docsPackage->icon);
         } catch (InvalidIconException $exception) {
-            $report->fail(__(':package: :message', ['package' => $label, 'message' => $exception->getMessage()]));
+            $report->fail(__(':package: :message', ['package' => $label, 'message' => $exception->getMessage()]), $package->id);
 
             return;
         } catch (Throwable $exception) {
             // A write failure (unwritable storage, say) fails this package,
             // not the whole step.
             report($exception);
-            $report->fail(__(':package: the icon couldn\'t be saved.', ['package' => $label]));
+            $report->fail(__(':package: the icon couldn\'t be saved.', ['package' => $label]), $package->id);
 
             return;
         }

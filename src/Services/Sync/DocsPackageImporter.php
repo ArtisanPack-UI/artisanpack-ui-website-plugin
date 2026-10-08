@@ -63,6 +63,60 @@ final class DocsPackageImporter
         return $report;
     }
 
+    /**
+     * Link one marketing package to its docs package and fill its empty
+     * sync fields, for its "Sync now" action. A linked package reads its
+     * own docs package; an unlinked one is matched by registry name. No
+     * package is created.
+     */
+    public function importOne(Package $package): SyncReport
+    {
+        $report      = new SyncReport;
+        $docsPackage = null === $package->docs_package_id
+            ? $this->unlinkedMatch($package)
+            : $this->docs->package($package->docs_package_id);
+
+        if (null === $docsPackage) {
+            $report->skipped++;
+            $report->note(__(':package: no docs site package matches it.', ['package' => $package->title ?: '#' . $package->id]));
+
+            return $report;
+        }
+
+        $this->fillSyncFields($package, $docsPackage);
+
+        if (! $package->isDirty()) {
+            $report->skipped++;
+
+            return $report;
+        }
+
+        $package->last_synced_at = Carbon::now();
+        $package->save();
+        $report->updated++;
+
+        return $report;
+    }
+
+    /**
+     * The docs package whose registry name is this unlinked package's
+     * Composer or npm name, unless another package already links to it.
+     */
+    private function unlinkedMatch(Package $package): ?DocsPackage
+    {
+        foreach ($this->docs->packages() as $docsPackage) {
+            $column = PackageFields::registryNameColumn($docsPackage->registry);
+
+            if (null === $column || null === $docsPackage->registryName() || $docsPackage->registryName() !== $package->getAttribute($column)) {
+                continue;
+            }
+
+            return Package::query()->where('docs_package_id', $docsPackage->id)->exists() ? null : $docsPackage;
+        }
+
+        return null;
+    }
+
     private function match(DocsPackage $docsPackage): ?Package
     {
         $linked = Package::query()->where('docs_package_id', $docsPackage->id)->first();

@@ -6,8 +6,11 @@ namespace ArtisanPackUI\Site\Http\Controllers;
 
 use ArtisanPackUI\Site\Exceptions\DocsSiteException;
 use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
+use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Models\PackageSyncState;
 use ArtisanPackUI\Site\Services\Sync\DocsPackageImporter;
 use ArtisanPackUI\Site\Services\Sync\PackageIconSync;
+use ArtisanPackUI\Site\Services\Sync\PackageSyncRunner;
 use ArtisanPackUI\Site\Services\Sync\PackageVersionSync;
 use ArtisanPackUI\Site\Services\Sync\SyncReport;
 use Closure;
@@ -23,6 +26,10 @@ use Illuminate\Http\Request;
  * A step that can't start at all (the docs site isn't configured or can't
  * be read) answers 422 with an admin-friendly message. Per-package
  * problems are reported inside the 200 report instead.
+ *
+ * Also the Edit Package sync status panel: the package's last sync
+ * outcome, and its "Sync now" action, which runs all three steps for that
+ * package alone through {@see PackageSyncRunner}.
  *
  * @since 0.3.0
  */
@@ -47,6 +54,44 @@ final class PackageSyncController
     public function icons(PackageIconSync $icons): JsonResponse
     {
         return self::run(static fn (): SyncReport => $icons->sync(), __('Package icons synced.'));
+    }
+
+    public function status(Package $package): JsonResponse
+    {
+        return response()->json(['status' => self::presentStatus($package)]);
+    }
+
+    /**
+     * Sync one package now. Step failures don't fail the request: they are
+     * part of the outcome the panel shows, just as the daily run records
+     * them.
+     */
+    public function syncNow(Package $package, PackageSyncRunner $runner): JsonResponse
+    {
+        $run = $runner->runOne($package);
+
+        return response()->json([
+            'message' => [] === $run['errors'] && 0 === $run['report']->failed
+                ? __('Package synced.')
+                : __('Sync finished with problems.'),
+            'report' => $run['report']->toArray(),
+            'status' => self::presentStatus($package->refresh()),
+        ]);
+    }
+
+    /**
+     * @return array{lastSyncedAt: string|null, lastCheckedAt: string|null, lastError: string|null, linked: bool}
+     */
+    private static function presentStatus(Package $package): array
+    {
+        $state = PackageSyncState::query()->where('package_id', $package->getKey())->first();
+
+        return [
+            'lastSyncedAt'  => $package->last_synced_at?->toIso8601String(),
+            'lastCheckedAt' => $state?->last_checked_at?->toIso8601String(),
+            'lastError'     => $state?->last_error,
+            'linked'        => null !== $package->docs_package_id,
+        ];
     }
 
     /**

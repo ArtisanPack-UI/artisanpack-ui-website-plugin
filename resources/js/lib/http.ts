@@ -62,3 +62,20 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 
     return payload as T;
 }
+
+/** The id placeholder in the shared per-package endpoint templates. */
+const PACKAGE_PLACEHOLDER = '__package__';
+
+/**
+ * Fill a per-package endpoint template with the record's id.
+ */
+export function packageUrl(template: string, packageId: number | string): string {
+    return template.replace(PACKAGE_PLACEHOLDER, encodeURIComponent(String(packageId)));
+}
+
+/**
+ * A timestamp in the admin's locale, or a dash when there isn't one.
+ */
+export function formatDateTime(iso: string | null): string {
+    return iso === null ? '—' : new Date(iso).toLocaleString();
+}

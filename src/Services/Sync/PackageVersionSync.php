@@ -85,6 +85,18 @@ final class PackageVersionSync
     }
 
     /**
+     * Sync one package, for its "Sync now" action.
+     */
+    public function syncOne(Package $package): SyncReport
+    {
+        $report = new SyncReport;
+
+        $this->syncPackage($package, $this->docsVersions($report), $report);
+
+        return $report;
+    }
+
+    /**
      * @param  array<int, string|null>|null  $docsVersions  Docs package id → version, or null when the docs site is unavailable.
      */
     private function syncPackage(Package $package, ?array $docsVersions, SyncReport $report): void
@@ -104,13 +116,13 @@ final class PackageVersionSync
         try {
             $version = $this->latestVersion((string) $package->registry, $name, $repo);
         } catch (RegistryException|GitHubException $exception) {
-            $report->fail(__(':package: :message', ['package' => $label, 'message' => $exception->getMessage()]));
+            $report->fail(__(':package: :message', ['package' => $label, 'message' => $exception->getMessage()]), $package->id);
 
             return;
         }
 
         if (null === $version) {
-            $report->fail(__(':package: no stable release was found.', ['package' => $label]));
+            $report->fail(__(':package: no stable release was found.', ['package' => $label]), $package->id);
 
             return;
         }
@@ -201,7 +213,7 @@ final class PackageVersionSync
             $this->docs->updatePackage($docsId, ['version' => $version]);
             $report->docsUpdated++;
         } catch (DocsSiteException $exception) {
-            $report->fail(__(':package: the docs site wasn\'t updated. :message', ['package' => $label, 'message' => $exception->getMessage()]));
+            $report->fail(__(':package: the docs site wasn\'t updated. :message', ['package' => $label, 'message' => $exception->getMessage()]), $package->id);
         }
     }
 
