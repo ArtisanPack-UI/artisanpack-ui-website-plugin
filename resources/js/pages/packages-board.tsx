@@ -12,18 +12,20 @@
  * milestone, last updated or created. Filters narrow by package, milestone
  * and label. The grouping, sort and filters are remembered per user in this
  * browser; a `?packages=` link (the dashboard board widget's, 5.5) replaces
- * the saved filters with that package filter. Dragging a card changes only
- * its Status, never its package.
+ * the saved filters with that package filter. Saved filters naming a
+ * milestone, label or package the board no longer has are dropped once it
+ * loads. Dragging a card changes only its Status, never its package.
  * Reuses the package board and issue modal (5.2, 5.3).
  */
 
 import { usePage } from '@inertiajs/react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { BoardView } from '../components/board/BoardView';
 import {
     filterItems,
     MilestoneLabelFilters,
+    pruneFilter,
     SORT_LABELS,
     sortItems,
     type BoardFilter,
@@ -167,9 +169,18 @@ function GlobalBoard() {
     const state = useBoard(endpoints?.board.index ?? null, endpoints?.board.move ?? null);
     const groupId = useId();
     const sortId = useId();
+    // A link's packages are kept even when they have no cards, so the board
+    // shows what the dashboard widget counted.
+    const linked = useRef(linkedPackages() ?? []);
 
     useEffect(() => forgetLinkedPackages(), []);
     useEffect(() => savePreferences(storageKey, preferences), [storageKey, preferences]);
+    useEffect(() => {
+        if (state.board !== null) {
+            const board = state.board;
+            setPreferences((current) => pruneFilter(current, board, linked.current));
+        }
+    }, [state.board]);
 
     const update = (changes: Partial<BoardPreferences>) => setPreferences((current) => ({ ...current, ...changes }));
 

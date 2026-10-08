@@ -20,6 +20,7 @@ export function BoardView({
     toolbar,
     showPackage = false,
     emptyMessage,
+    retryable = true,
 }: {
     state: BoardState;
     endpoints: BoardEndpoints;
@@ -27,6 +28,8 @@ export function BoardView({
     toolbar?: ReactNode;
     showPackage?: boolean;
     emptyMessage: string;
+    /** Whether a failed load offers "Try again"; false when retrying can't help. */
+    retryable?: boolean;
 }) {
     const [open, setOpen] = useState<BoardItem | null>(null);
     const { board, loading, error, notice } = state;
@@ -39,9 +42,11 @@ export function BoardView({
                         <p role="alert" className="text-sm text-error">
                             {error}
                         </p>
-                        <button type="button" className="btn btn-sm" onClick={state.reload}>
-                            Try again
-                        </button>
+                        {retryable && (
+                            <button type="button" className="btn btn-sm" onClick={state.reload}>
+                                Try again
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="flex animate-pulse gap-3" aria-label="Loading the board">
@@ -100,6 +105,7 @@ export function BoardView({
                     lanes={lanes}
                     showPackage={showPackage}
                     canMove
+                    isPending={state.isPending}
                     onMove={(item, statusId) => void state.moveItem(item, statusId)}
                     onOpen={setOpen}
                 />

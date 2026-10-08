@@ -81,3 +81,15 @@ it('shares the plugin prop only on admin pages, with plugin users', function ():
         ->where('artisanpackUi.can.statsView', true)
         ->has('artisanpackUi.endpoints.icons'));
 });
+
+it('shares the host\'s Packages list URL when the host has the route', function (): void {
+    actingAsUserWith([Permissions::SYNC]);
+    Route::middleware('web')->get('/admin/test-page', fn () => Inertia::render('test'));
+
+    $this->get('/admin/test-page')->assertInertia(fn (Assert $page) => $page->where('artisanpackUi.endpoints.packagesList', null));
+
+    Route::name('admin.content.index')->get('/admin/content/{contentType}', fn () => '');
+    app('router')->getRoutes()->refreshNameLookups();
+
+    $this->get('/admin/test-page')->assertInertia(fn (Assert $page) => $page->where('artisanpackUi.endpoints.packagesList', url('/admin/content/package')));
+});

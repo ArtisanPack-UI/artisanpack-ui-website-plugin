@@ -76,42 +76,58 @@ export function IconPickerField({ form }: { form: EditForm }) {
     const value = form.data.values[ICON_FIELD_KEY];
     const selected = useMemo(() => parseIconRef(value), [value]);
     const [selectedSvg, setSelectedSvg] = useState<string | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
     const [open, setOpen] = useState(false);
-    /** The icon whose preview `selectedSvg` already holds, so picking one doesn't refetch it. */
+    /** The icon whose preview `selectedSvg` holds, set once it has loaded, so picking one doesn't refetch it. */
     const previewFor = useRef<string | null>(null);
 
     const canUseCatalog = endpoints !== null && Object.values(can).some(Boolean);
+    // A string, so the shared endpoints object being rebuilt on every
+    // Inertia response doesn't refetch the preview.
+    const iconsEndpoint = endpoints?.icons ?? null;
+    const invalidValue = selected === null && (value ?? '').trim() !== '';
 
     // Look up the preview for the stored icon.
     useEffect(() => {
         const key = selected ? `${selected.set}:${selected.name}` : null;
 
         if (key !== null && key === previewFor.current) {
+            setPreviewLoading(false);
+
             return;
         }
 
-        previewFor.current = key;
         setSelectedSvg(null);
 
-        if (!selected || !canUseCatalog || endpoints === null) {
+        if (!selected || !canUseCatalog || iconsEndpoint === null) {
+            previewFor.current = null;
+            setPreviewLoading(false);
+
             return;
         }
 
         let cancelled = false;
+        setPreviewLoading(true);
 
-        apiFetch<IconCatalogResponse>(catalogUrl(endpoints.icons, selected.name, selected.set, 1))
+        apiFetch<IconCatalogResponse>(catalogUrl(iconsEndpoint, selected.name, selected.set, 1))
             .then((response) => {
                 const match = response.icons.find((icon) => icon.name === selected.name && icon.set === selected.set);
                 if (!cancelled) {
+                    previewFor.current = key;
                     setSelectedSvg(match?.svg ?? null);
                 }
             })
-            .catch(() => undefined);
+            .catch(() => undefined)
+            .finally(() => {
+                if (!cancelled) {
+                    setPreviewLoading(false);
+                }
+            });
 
         return () => {
             cancelled = true;
         };
-    }, [selected, canUseCatalog, endpoints]);
+    }, [selected, canUseCatalog, iconsEndpoint]);
 
     if (!canUseCatalog || endpoints === null) {
         return null;
@@ -124,6 +140,7 @@ export function IconPickerField({ form }: { form: EditForm }) {
             [ICON_FIELD_KEY]: icon ? JSON.stringify({ set: icon.set, name: icon.name }) : '',
         });
         setSelectedSvg(icon?.svg ?? null);
+        setPreviewLoading(false);
         setOpen(false);
     }
 
@@ -134,7 +151,9 @@ export function IconPickerField({ form }: { form: EditForm }) {
                     {selectedSvg ? (
                         <SvgPreview svg={selectedSvg} className="h-8 w-8" />
                     ) : (
-                        <span className="text-xs text-base-content/45">{selected ? '?' : 'None'}</span>
+                        <span className="text-xs text-base-content/45">
+                            {selected && previewLoading ? '…' : selected || invalidValue ? '?' : 'None'}
+                        </span>
                     )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -143,8 +162,10 @@ export function IconPickerField({ form }: { form: EditForm }) {
                         {selected ? (
                             <>
                                 <code>{selected.set}</code> / <code>{selected.name}</code>
-                                {!selectedSvg && ' (not found in any registered icon set)'}
+                                {!selectedSvg && !previewLoading && ' (not found in any registered icon set)'}
                             </>
+                        ) : invalidValue ? (
+                            <span className="text-error">Invalid icon value; pick an icon to replace it.</span>
                         ) : (
                             'No icon chosen. The single-package template shows it through the icon block.'
                         )}
@@ -154,7 +175,7 @@ export function IconPickerField({ form }: { form: EditForm }) {
                     <button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
                         {open ? 'Close' : selected ? 'Change icon' : 'Choose icon'}
                     </button>
-                    {selected && (
+                    {(selected || invalidValue) && (
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => choose(null)}>
                             Clear
                         </button>

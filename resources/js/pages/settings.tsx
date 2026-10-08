@@ -237,11 +237,9 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                     <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
                         {saving ? 'Saving…' : 'Save settings'}
                     </button>
-                    {notice && (
-                        <p role="status" className={`text-sm ${notice.ok ? 'text-success' : 'text-error'}`}>
-                            {notice.message}
-                        </p>
-                    )}
+                    <div role="status" aria-live="polite">
+                        {notice && <p className={`text-sm ${notice.ok ? 'text-success' : 'text-error'}`}>{notice.message}</p>}
+                    </div>
                 </div>
             </form>
         </PluginPage>
@@ -315,23 +313,24 @@ function ConnectionTest({
                 </button>
                 {dirty && <span className="text-xs text-base-content/55">Save your changes to test them.</span>}
             </div>
-            {state.result && (
-                <div
-                    role="status"
-                    className={`rounded-md border px-3 py-2 text-sm ${
-                        state.result.ok ? 'border-success/40 text-success' : 'border-error/40 text-error'
-                    }`}
-                >
-                    <p className="font-medium">{state.result.message}</p>
-                    {state.result.details.length > 0 && (
-                        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-base-content/70">
-                            {state.result.details.map((detail) => (
-                                <li key={detail}>{detail}</li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-            )}
+            <div role="status" aria-live="polite">
+                {state.result && (
+                    <div
+                        className={`rounded-md border px-3 py-2 text-sm ${
+                            state.result.ok ? 'border-success/40 text-success' : 'border-error/40 text-error'
+                        }`}
+                    >
+                        <p className="font-medium">{state.result.message}</p>
+                        {state.result.details.length > 0 && (
+                            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-base-content/70">
+                                {state.result.details.map((detail) => (
+                                    <li key={detail}>{detail}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

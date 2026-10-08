@@ -10,9 +10,13 @@
  *
  * Days a source couldn't be read are gaps, never zeroes (see
  * `../components/TrendChart`).
+ *
+ * Responses are cached at module level for {@link CACHE_TTL}, so switching
+ * back to this tab (which remounts it) shows the stats at once instead of
+ * calling the registry and GitHub again.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { TrendChart } from '../components/TrendChart';
 import { CARD_CLASS, useSharedEndpoints } from '../components/ui';
@@ -21,6 +25,21 @@ import { apiFetch, formatDateTime, packageUrl } from '../lib/http';
 import type { PackageStatsResponse, PackageTabProps, StatPoint } from '../lib/types';
 
 const RANGE_LABELS: Record<number, string> = { 30: '30 days', 90: '90 days', 365: '1 year' };
+
+/** Milliseconds a cached response is shown without fetching it again. */
+const CACHE_TTL = 60_000;
+
+const statsCache = new Map<string, { at: number; data: PackageStatsResponse }>();
+
+function statsUrl(template: string, id: number, selected: number | null): string {
+    const url = new URL(packageUrl(template, id), window.location.origin);
+
+    if (selected !== null) {
+        url.searchParams.set('range', String(selected));
+    }
+
+    return url.toString();
+}
 
 const CHARTS: { key: keyof Omit<StatPoint, 'date'>; title: string }[] = [
     { key: 'downloadsDaily', title: 'Daily downloads' },
@@ -32,37 +51,57 @@ const CHARTS: { key: keyof Omit<StatPoint, 'date'>; title: string }[] = [
 export default function PackageStatsTab({ context }: PackageTabProps) {
     const endpoints = useSharedEndpoints();
     const packageId = context.record.id as number | undefined;
-    const [range, setRange] = useState<number | null>(null);
-    const [stats, setStats] = useState<PackageStatsResponse | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    const load = useCallback(
-        async (template: string, id: number, selected: number | null) => {
-            setLoading(true);
-
-            try {
-                const url = new URL(packageUrl(template, id), window.location.origin);
-                if (selected !== null) {
-                    url.searchParams.set('range', String(selected));
-                }
-
-                const response = await apiFetch<PackageStatsResponse>(url.toString());
-                setStats(response);
-                setRange(response.range);
-                setError(null);
-            } catch (loadError) {
-                setError(loadError instanceof Error ? loadError.message : 'Could not load the stats.');
-            } finally {
-                setLoading(false);
-            }
-        },
-        [],
-    );
-
     // Keyed on the template string: the shared endpoints object is rebuilt
     // on every Inertia response, including a save of this screen's form.
     const statsTemplate = endpoints?.package.stats ?? null;
+    const [stats, setStats] = useState<PackageStatsResponse | null>(() =>
+        statsTemplate === null || packageId === undefined
+            ? null
+            : (statsCache.get(statsUrl(statsTemplate, packageId, null))?.data ?? null),
+    );
+    const [range, setRange] = useState<number | null>(stats?.range ?? null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const request = useRef(0);
+
+    const load = useCallback(async (template: string, id: number, selected: number | null, force = false) => {
+        const url = statsUrl(template, id, selected);
+        const cached = statsCache.get(url);
+        const current = ++request.current;
+
+        if (cached !== undefined) {
+            setStats(cached.data);
+            setRange(cached.data.range);
+        }
+
+        if (!force && cached !== undefined && Date.now() - cached.at < CACHE_TTL) {
+            setError(null);
+            setLoading(false);
+
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const response = await apiFetch<PackageStatsResponse>(url);
+            statsCache.set(url, { at: Date.now(), data: response });
+
+            if (current === request.current) {
+                setStats(response);
+                setRange(response.range);
+                setError(null);
+            }
+        } catch (loadError) {
+            if (current === request.current) {
+                setError(loadError instanceof Error ? loadError.message : 'Could not load the stats.');
+            }
+        } finally {
+            if (current === request.current) {
+                setLoading(false);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (statsTemplate !== null && packageId !== undefined) {
@@ -78,7 +117,14 @@ export default function PackageStatsTab({ context }: PackageTabProps) {
         return (
             <section className={CARD_CLASS}>
                 {error !== null ? (
-                    <p className="text-sm text-error">{error}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p role="alert" className="text-sm text-error">
+                            {error}
+                        </p>
+                        <button type="button" className="btn btn-sm" onClick={() => load(endpoints.package.stats, packageId, range, true)}>
+                            Try again
+                        </button>
+                    </div>
                 ) : (
                     <p className="animate-pulse text-sm text-base-content/55">Loading stats…</p>
                 )}
@@ -144,9 +190,13 @@ export default function PackageStatsTab({ context }: PackageTabProps) {
                                 key={option}
                                 type="button"
                                 aria-pressed={range === option}
-                                disabled={loading}
+                                aria-disabled={loading || undefined}
                                 className={`btn btn-xs ${range === option ? 'btn-primary' : 'btn-ghost'}`}
-                                onClick={() => load(endpoints.package.stats, packageId, option)}
+                                onClick={() => {
+                                    if (!loading) {
+                                        void load(endpoints.package.stats, packageId, option);
+                                    }
+                                }}
                             >
                                 {RANGE_LABELS[option] ?? `${option} days`}
                             </button>

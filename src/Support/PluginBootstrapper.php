@@ -17,6 +17,7 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
@@ -142,6 +143,7 @@ final class PluginBootstrapper
                     'syncImport'   => route('artisanpack-ui.sync.import'),
                     'syncVersions' => route('artisanpack-ui.sync.versions'),
                     'syncIcons'    => route('artisanpack-ui.sync.icons'),
+                    'packagesList' => Route::has('admin.content.index') ? route('admin.content.index', ['contentType' => 'package']) : null,
                     'package'      => self::packageEndpoints(),
                     'board'        => self::boardEndpoints(),
                 ],

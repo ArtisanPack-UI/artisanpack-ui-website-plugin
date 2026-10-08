@@ -15,6 +15,9 @@
  * invalid DOM. React still bubbles synthetic events through a portal to its
  * React parents, so every form here also stops `submit` propagating, or the
  * host's submit handler would save the package.
+ *
+ * Closing the modal (Escape, the Close button or the backdrop) with an
+ * unsaved edit or comment asks first.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
@@ -93,6 +96,7 @@ export function IssueModal({
     const [saving, setSaving] = useState(false);
     const [comment, setComment] = useState('');
     const [status, setStatus] = useState<string | null>(null);
+    const [attempt, setAttempt] = useState(0);
 
     const issueEndpoint = issueUrl(endpoints.issue, repo, number);
 
@@ -124,7 +128,38 @@ export function IssueModal({
         return () => {
             active = false;
         };
-    }, [issueEndpoint]);
+    }, [issueEndpoint, attempt]);
+
+    function retry() {
+        setError(null);
+        setAttempt((current) => current + 1);
+    }
+
+    /** Whether closing now would throw away an edit or a comment. */
+    function hasUnsavedWork(): boolean {
+        if (comment.trim() !== '') {
+            return true;
+        }
+
+        if (!editing || draft === null || issue === null) {
+            return false;
+        }
+
+        const original = draftFrom(issue);
+
+        return (
+            draft.title !== original.title ||
+            draft.body !== original.body ||
+            draft.milestone !== original.milestone ||
+            !sameSet(draft.labels, original.labels) ||
+            !sameSet(draft.assignees, original.assignees)
+        );
+    }
+
+    /** Ask before discarding unsaved work; true when closing may go ahead. */
+    function confirmDiscard(): boolean {
+        return !hasUnsavedWork() || window.confirm('Discard your unsaved changes to this issue?');
+    }
 
     const applyIssue = useCallback(
         (updated: IssueDetail) => {
@@ -241,7 +276,17 @@ export function IssueModal({
     }
 
     return createPortal(
-        <dialog ref={dialog} className="modal" aria-labelledby={titleId} onClose={onClose}>
+        <dialog
+            ref={dialog}
+            className="modal"
+            aria-labelledby={titleId}
+            onClose={onClose}
+            onCancel={(event) => {
+                if (!confirmDiscard()) {
+                    event.preventDefault();
+                }
+            }}
+        >
             <style>{MARKDOWN_CSS}</style>
             <div className="modal-box" style={{ width: '100%', maxWidth: '48rem' }}>
                 <div className="flex items-start justify-between gap-3">
@@ -258,7 +303,15 @@ export function IssueModal({
                             {issue?.title ?? 'Loading issue…'}
                         </h2>
                     </div>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => dialog.current?.close()}>
+                    <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                            if (confirmDiscard()) {
+                                dialog.current?.close();
+                            }
+                        }}
+                    >
                         Close
                     </button>
                 </div>
@@ -269,9 +322,17 @@ export function IssueModal({
                 </p>
 
                 {error !== null && (
-                    <p role="alert" className="mt-3 rounded-md border border-error/40 px-3 py-2 text-sm text-error">
-                        {error}
-                    </p>
+                    <div
+                        role="alert"
+                        className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-error/40 px-3 py-2 text-sm text-error"
+                    >
+                        <p>{error}</p>
+                        {issue === null && (
+                            <button type="button" className="btn btn-sm" onClick={retry}>
+                                Try again
+                            </button>
+                        )}
+                    </div>
                 )}
                 <p aria-live="polite" className="sr-only">
                     {status ?? ''}
@@ -399,13 +460,17 @@ export function IssueModal({
                             <span className="flex gap-2">
                                 <button
                                     type="button"
-                                    className="btn btn-sm"
-                                    disabled={saving}
-                                    onClick={() =>
-                                        issue.state === 'OPEN'
+                                    className={`btn btn-sm ${saving ? 'opacity-60' : ''}`}
+                                    aria-disabled={saving}
+                                    onClick={() => {
+                                        if (saving) {
+                                            return;
+                                        }
+
+                                        void (issue.state === 'OPEN'
                                             ? patch({ state: 'closed', state_reason: 'completed' }, 'Issue closed.')
-                                            : patch({ state: 'open', state_reason: 'reopened' }, 'Issue reopened.')
-                                    }
+                                            : patch({ state: 'open', state_reason: 'reopened' }, 'Issue reopened.'));
+                                    }}
                                 >
                                     {issue.state === 'OPEN' ? 'Close issue' : 'Reopen issue'}
                                 </button>
@@ -462,7 +527,17 @@ export function IssueModal({
                     </section>
                 )}
             </div>
-            <form method="dialog" className="modal-backdrop" onSubmit={(event) => event.stopPropagation()}>
+            <form
+                method="dialog"
+                className="modal-backdrop"
+                onSubmit={(event) => {
+                    event.stopPropagation();
+
+                    if (!confirmDiscard()) {
+                        event.preventDefault();
+                    }
+                }}
+            >
                 <button type="submit">Close</button>
             </form>
         </dialog>,

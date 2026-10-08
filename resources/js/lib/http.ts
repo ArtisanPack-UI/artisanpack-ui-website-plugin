@@ -60,6 +60,18 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
     const response = await fetch(url, { credentials: 'same-origin', ...init, headers });
     const text = await response.text();
 
+    // A redirect (e.g. to two-factor enrolment) or an HTML page is never a
+    // valid answer from these JSON endpoints, even with a 2xx status. An
+    // empty 2xx body (204) is, and resolves to null.
+    const isJson = (response.headers.get('Content-Type') ?? '').includes('json');
+    if (response.ok && (response.redirected || (text.length > 0 && !isJson))) {
+        throw new ApiError('Your session needs attention. Reload the page and try again.', response.status);
+    }
+
+    if (response.status === 419 || response.status === 401) {
+        throw new ApiError('Your session expired. Reload the page and try again.', response.status);
+    }
+
     let payload: unknown = null;
     if (text.length > 0) {
         try {

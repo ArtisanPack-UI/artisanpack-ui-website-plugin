@@ -85,6 +85,8 @@ export interface PackageTabProps {
  */
 export interface SharedEndpoints {
     icons: string;
+    /** The host's Packages list, or null when the host has no such route. */
+    packagesList: string | null;
     syncImport: string;
     syncVersions: string;
     syncIcons: string;

@@ -11,7 +11,6 @@
         class="ap-clipboard__button"
         data-clipboard-target
         data-clipboard-value="{{ $command }}"
-        aria-label="Copy command"
     >
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -31,5 +30,7 @@
             <path d="M3 4h.5"></path>
         </svg>
         <span>{{ $buttonLabel }}</span>
+        <span class="sr-only"> {{ $command }}</span>
     </button>
+    <span class="sr-only" aria-live="polite" data-clipboard-status></span>
 </div>

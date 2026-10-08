@@ -78,13 +78,16 @@ export default function PackageSyncPanel({ context }: PackageTabProps) {
                         <dt className="text-xs text-base-content/60">Last checked</dt>
                         <dd className="text-base-content">{formatDateTime(status.lastCheckedAt)}</dd>
                     </div>
-                    {status.lastError !== null && (
-                        <div role="alert" className="rounded-md border border-error/40 px-3 py-2">
-                            <dt className="text-xs font-medium text-error">Last error</dt>
-                            <dd className="mt-1 text-xs text-base-content/70" style={{ whiteSpace: 'pre-line' }}>{status.lastError}</dd>
-                        </div>
-                    )}
                 </dl>
+            )}
+
+            {status !== null && status.lastError !== null && (
+                <div className="mt-2 rounded-md border border-error/40 px-3 py-2">
+                    <p className="text-xs font-medium text-error">Last error</p>
+                    <p className="mt-1 text-xs text-base-content/70" style={{ whiteSpace: 'pre-line' }}>
+                        {status.lastError}
+                    </p>
+                </div>
             )}
 
             {status !== null && !status.linked && (
@@ -100,20 +103,22 @@ export default function PackageSyncPanel({ context }: PackageTabProps) {
                 >
                     {syncing ? 'Syncing…' : 'Sync now'}
                 </button>
-                {outcome !== null && (
-                    <div role="status" className="space-y-1 text-xs text-base-content/70">
-                        <p>{outcome.message}</p>
-                        {outcome.changed && (
-                            <p>
-                                Sync updated this package. Reload to see the new values; saving the form as it is
-                                would put the old ones back.{' '}
-                                <button type="button" className="link" onClick={() => window.location.reload()}>
-                                    Reload
-                                </button>
-                            </p>
-                        )}
-                    </div>
-                )}
+                <div role="status" aria-live="polite" className="space-y-1 text-xs text-base-content/70">
+                    {outcome !== null && (
+                        <>
+                            <p>{outcome.message}</p>
+                            {outcome.changed && (
+                                <p>
+                                    Sync updated this package. Reload to see the new values; saving the form as it is
+                                    would put the old ones back.{' '}
+                                    <button type="button" className="link" onClick={() => window.location.reload()}>
+                                        Reload
+                                    </button>
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
         </section>
     );

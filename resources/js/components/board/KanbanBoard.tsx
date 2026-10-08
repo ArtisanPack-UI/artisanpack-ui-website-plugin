@@ -5,7 +5,9 @@
  * Cards move by drag and drop, or with each card's Status select, which is
  * the keyboard and screen-reader path. Either way only the Status
  * changes: a card dropped into another package's swimlane stays in its
- * own. Clicking a card's title opens the issue modal.
+ * own. Clicking a card's title opens the issue modal. A card with a move
+ * in flight can't be dragged, and its select is marked disabled, until the
+ * move settles.
  */
 
 import { useState, type DragEvent } from 'react';
@@ -30,6 +32,7 @@ export function KanbanBoard({
     lanes,
     showPackage = false,
     canMove,
+    isPending = () => false,
     onMove,
     onOpen,
 }: {
@@ -37,6 +40,8 @@ export function KanbanBoard({
     lanes: BoardLane[];
     showPackage?: boolean;
     canMove: boolean;
+    /** Whether a card has a move in flight. */
+    isPending?: (itemId: string) => boolean;
     onMove: (item: BoardItem, statusId: string | null) => void;
     onOpen: (item: BoardItem) => void;
 }) {
@@ -106,6 +111,7 @@ export function KanbanBoard({
                                                 columns={columns}
                                                 showPackage={showPackage}
                                                 canMove={canMove}
+                                                pending={isPending(item.id)}
                                                 dragging={dragging?.id === item.id}
                                                 onDragStart={(event) => {
                                                     event.dataTransfer.setData(DRAG_TYPE, item.id);
@@ -136,6 +142,7 @@ function BoardCard({
     columns,
     showPackage,
     canMove,
+    pending,
     dragging,
     onDragStart,
     onDragEnd,
@@ -146,6 +153,7 @@ function BoardCard({
     columns: BoardColumn[];
     showPackage: boolean;
     canMove: boolean;
+    pending: boolean;
     dragging: boolean;
     onDragStart: (event: DragEvent<HTMLLIElement>) => void;
     onDragEnd: () => void;
@@ -154,11 +162,12 @@ function BoardCard({
 }) {
     return (
         <li
-            draggable={canMove}
+            draggable={canMove && !pending}
+            aria-busy={pending || undefined}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
-            className={`rounded-md border border-base-300/60 bg-base-100 p-2 shadow-sm ${canMove ? 'cursor-grab' : ''}`}
-            style={{ opacity: dragging ? 0.5 : 1 }}
+            className={`rounded-md border border-base-300/60 bg-base-100 p-2 shadow-sm ${canMove && !pending ? 'cursor-grab' : ''}`}
+            style={{ opacity: dragging || pending ? 0.5 : 1 }}
         >
             <p className="text-xs text-base-content/55">
                 {item.repo.slice(item.repo.indexOf('/') + 1)}#{item.number}
@@ -208,7 +217,8 @@ function BoardCard({
                 </span>
                 {canMove && (
                     <select
-                        aria-label={`Status of #${item.number}`}
+                        aria-label={`Status of ${item.repo.split('/').pop()}#${item.number}: ${item.title}`}
+                        aria-disabled={pending || undefined}
                         className="select select-xs"
                         style={{ maxWidth: '8rem' }}
                         value={item.statusId ?? ''}
