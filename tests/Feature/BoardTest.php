@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Services\Board\BoardSummary;
 use ArtisanPackUI\Site\Services\Board\ProjectBoardReader;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Http\Client\Request;
@@ -11,8 +12,9 @@ use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
- * The kanban boards (roadmap 5.1, 5.2 and 5.4): reading the org project,
- * the global and package board endpoints, and moving a card.
+ * The kanban boards (roadmap 5.1, 5.2, 5.4 and 5.5): reading the org
+ * project, the global and package board endpoints, moving a card, and the
+ * dashboard board widget's counts.
  */
 
 beforeEach(function (): void {
@@ -312,6 +314,83 @@ describe('moving a card', function (): void {
 
     it('only accepts project item ids in the URL', function (): void {
         $this->putJson('/admin/artisanpack-ui/board/items/not%20an%20id/status', ['status' => null])->assertNotFound();
+    });
+});
+
+describe('dashboard board widget', function (): void {
+    beforeEach(function (): void {
+        $this->a11y  = boardPackage('Accessibility', 'ArtisanPack-UI/accessibility');
+        $this->icons = boardPackage('Icons', 'ArtisanPack-UI/icons');
+
+        fakeGitHubGraphql([projectPage([
+            projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1, 'opt-todo'),
+            projectIssue('PVTI_2', 'ArtisanPack-UI/accessibility', 2, 'opt-doing'),
+            projectIssue('PVTI_3', 'ArtisanPack-UI/icons', 3, 'opt-todo'),
+            projectIssue('PVTI_4', 'ArtisanPack-UI/unmapped', 4, null),
+        ])]);
+    });
+
+    it('counts every card per Status column', function (): void {
+        $summary = app(BoardSummary::class)->summarize([]);
+
+        expect($summary['columns'])->toBe([
+            ['id' => null, 'name' => 'No status', 'count' => 1],
+            ['id' => 'opt-todo', 'name' => 'Todo', 'count' => 2],
+            ['id' => 'opt-doing', 'name' => 'In progress', 'count' => 1],
+            ['id' => 'opt-done', 'name' => 'Done', 'count' => 0],
+        ])
+            ->and($summary['total'])->toBe(4)
+            ->and($summary['packages'])->toBe([])
+            ->and($summary['project'])->toBe(['title' => 'ArtisanPack UI', 'url' => 'https://github.com/orgs/ArtisanPack-UI/projects/7'])
+            ->and($summary['boardUrl'])->toBe(url('/admin/artisanpack-ui'))
+            ->and($summary['error'])->toBeNull();
+    });
+
+    it('counts only the chosen packages and links to the board filtered to them', function (): void {
+        $summary = app(BoardSummary::class)->summarize([$this->icons->id, $this->a11y->id]);
+
+        expect(array_column($summary['columns'], 'count'))->toBe([0, 2, 1, 0])
+            ->and($summary['total'])->toBe(3)
+            ->and($summary['packages'])->toBe([
+                ['id' => $this->a11y->id, 'title' => 'Accessibility'],
+                ['id' => $this->icons->id, 'title' => 'Icons'],
+            ])
+            ->and($summary['boardUrl'])->toBe(url('/admin/artisanpack-ui') . '?packages=' . urlencode($this->a11y->id . ',' . $this->icons->id));
+    });
+
+    it('counts zero, not every card, for a chosen package with no issues on the project', function (): void {
+        $docs = boardPackage('Docs', 'ArtisanPack-UI/docs');
+
+        $summary = app(BoardSummary::class)->summarize([$docs->id]);
+
+        expect($summary['total'])->toBe(0)
+            ->and($summary['packages'])->toBe([['id' => $docs->id, 'title' => 'Docs']])
+            ->and($summary['boardUrl'])->toBe(url('/admin/artisanpack-ui') . '?packages=' . $docs->id);
+    });
+
+    it('counts every card when none of the chosen packages are left', function (): void {
+        $summary = app(BoardSummary::class)->summarize([999]);
+
+        expect($summary['total'])->toBe(4)
+            ->and($summary['packages'])->toBe([])
+            ->and($summary['boardUrl'])->toBe(url('/admin/artisanpack-ui'));
+    });
+
+    it('reads the project once for every widget within the cache window', function (): void {
+        app(BoardSummary::class)->summarize([]);
+        app(BoardSummary::class)->summarize([$this->icons->id]);
+
+        Http::assertSentCount(2);
+    });
+
+    it('reports a GitHub failure instead of throwing', function (): void {
+        IntegrationSettings::current()->update(['github_project_number' => null]);
+
+        $summary = app(BoardSummary::class)->summarize([]);
+
+        expect($summary['error'])->toContain('project number')
+            ->and($summary['columns'])->toBe([])
+            ->and($summary['total'])->toBe(0);
     });
 });
 

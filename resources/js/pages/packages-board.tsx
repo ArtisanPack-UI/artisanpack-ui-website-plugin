@@ -11,7 +11,9 @@
  * Status columns; ungrouped, cards in each column sort by package,
  * milestone, last updated or created. Filters narrow by package, milestone
  * and label. The grouping, sort and filters are remembered per user in this
- * browser. Dragging a card changes only its Status, never its package.
+ * browser; a `?packages=` link (the dashboard board widget's, 5.5) replaces
+ * the saved filters with that package filter. Dragging a card changes only
+ * its Status, never its package.
  * Reuses the package board and issue modal (5.2, 5.3).
  */
 
@@ -67,6 +69,55 @@ function loadPreferences(key: string): BoardPreferences {
     }
 }
 
+/**
+ * The package filter a link asked for with `?packages=1,2` (the dashboard
+ * board widget's link), or null when the URL names none.
+ */
+function linkedPackages(): number[] | null {
+    try {
+        const value = new URLSearchParams(window.location.search).get('packages');
+
+        if (value === null) {
+            return null;
+        }
+
+        return value
+            .split(',')
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Drop `?packages=` once it's applied, so a reload keeps whatever the
+ * filters were changed to rather than reapplying the link's.
+ */
+function forgetLinkedPackages(): void {
+    try {
+        const url = new URL(window.location.href);
+
+        if (url.searchParams.has('packages')) {
+            url.searchParams.delete('packages');
+            window.history.replaceState(window.history.state, '', url);
+        }
+    } catch {
+        // The filter still applies; only a reload would reapply it.
+    }
+}
+
+/**
+ * The saved preferences, with a linked package filter taking the place of
+ * the saved filters, so the board shows what the link counted.
+ */
+function initialPreferences(key: string): BoardPreferences {
+    const preferences = loadPreferences(key);
+    const packages = linkedPackages();
+
+    return packages === null ? preferences : { ...preferences, packages, milestone: '', label: '' };
+}
+
 function savePreferences(key: string, preferences: BoardPreferences): void {
     try {
         window.localStorage.setItem(key, JSON.stringify(preferences));
@@ -112,11 +163,12 @@ function GlobalBoard() {
     const endpoints = useSharedEndpoints();
     const { props } = usePage<{ auth?: { user?: { id?: number | string } | null } }>();
     const storageKey = `artisanpack-ui:board:${props.auth?.user?.id ?? 'guest'}`;
-    const [preferences, setPreferences] = useState<BoardPreferences>(() => loadPreferences(storageKey));
+    const [preferences, setPreferences] = useState<BoardPreferences>(() => initialPreferences(storageKey));
     const state = useBoard(endpoints?.board.index ?? null, endpoints?.board.move ?? null);
     const groupId = useId();
     const sortId = useId();
 
+    useEffect(() => forgetLinkedPackages(), []);
     useEffect(() => savePreferences(storageKey, preferences), [storageKey, preferences]);
 
     const update = (changes: Partial<BoardPreferences>) => setPreferences((current) => ({ ...current, ...changes }));

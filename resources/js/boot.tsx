@@ -8,7 +8,7 @@
  *
  * Contributes the Docs, Stats and Issues tabs, the sync status panel and
  * the icon picker to the `package` edit screen, the "Sync from docs"
- * button to the Packages list, and the dashboard stats widgets' bodies.
+ * button to the Packages list, and the dashboard widgets' bodies.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
  * `contentEdit` Inertia prop, so `AdminEditSlot` seeds every slot with `[]`
@@ -212,8 +212,9 @@ addFilter('keystone.admin.topbar.right', (node: unknown) => (
 ));
 
 /**
- * The dashboard stats widgets' bodies (roadmap 4.3), keyed by each PHP
- * widget's `extendedInfo()['component']` (see `src/Widgets`). Registered
+ * The dashboard stats and board widgets' bodies (roadmap 4.3 and 5.5),
+ * keyed by each PHP widget's `extendedInfo()['component']` (see
+ * `src/Widgets`). Registered
  * through the host's `registerFederated` action rather than its widget
  * registry module, which isn't a shared federation singleton: the action
  * writes into the registry the dashboard grid actually reads. The host
@@ -227,6 +228,7 @@ const DASHBOARD_WIDGETS: Record<string, () => Promise<{ default: ComponentType<W
     ArtisanPackUIGitHubOverviewWidget: () => import('./widgets/GitHubOverviewWidget'),
     ArtisanPackUITopPackagesWidget: () => import('./widgets/TopPackagesWidget'),
     ArtisanPackUIReleaseFeedWidget: () => import('./widgets/ReleaseFeedWidget'),
+    ArtisanPackUIBoardWidget: () => import('./widgets/BoardWidget'),
 };
 
 for (const [key, load] of Object.entries(DASHBOARD_WIDGETS)) {
