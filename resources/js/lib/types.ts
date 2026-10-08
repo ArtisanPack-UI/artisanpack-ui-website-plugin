@@ -88,6 +88,93 @@ export interface SharedEndpoints {
     syncImport: string;
     syncVersions: string;
     syncIcons: string;
+    package: PackageEndpoints;
+}
+
+/**
+ * Per-package endpoint templates; `packageUrl()` in `./http` fills in the
+ * record id.
+ */
+export interface PackageEndpoints {
+    syncStatus: string;
+    syncNow: string;
+    docsStatus: string;
+    docsTree: string;
+    importDocs: string;
+    importChangelog: string;
+    reorderDocs: string;
+    stats: string;
+}
+
+/**
+ * How a package's last sync went (see `PackageSyncController::status()`).
+ */
+export interface PackageSyncStatus {
+    lastSyncedAt: string | null;
+    lastCheckedAt: string | null;
+    lastError: string | null;
+    linked: boolean;
+}
+
+/**
+ * The docs site's last docs or changelog import for a package.
+ */
+export interface DocsImport {
+    status: 'queued' | 'succeeded' | 'failed' | null;
+    error: string | null;
+    importedAt: string | null;
+}
+
+export interface DocsStatusResponse {
+    linked: boolean;
+    imports: { docs: DocsImport; changelog: DocsImport } | null;
+}
+
+/**
+ * One page in a package's documentation tree on the docs site.
+ */
+export interface DocNode {
+    id: number;
+    title: string;
+    slug: string;
+    parent: number;
+    menuOrder: number;
+    children: DocNode[];
+}
+
+/**
+ * One day's snapshot on the Stats tab's trend charts. Null means the
+ * source couldn't be read that day.
+ */
+export interface StatPoint {
+    date: string;
+    downloadsDaily: number | null;
+    downloadsMonthly: number | null;
+    downloadsTotal: number | null;
+    stars: number | null;
+    forks: number | null;
+    watchers: number | null;
+    openIssues: number | null;
+    openPullRequests: number | null;
+    dependents: number | null;
+}
+
+export interface PackageStatsResponse {
+    live: {
+        downloads: { daily: number | null; monthly: number | null; total: number | null };
+        stars: number | null;
+        forks: number | null;
+        watchers: number | null;
+        openIssues: number | null;
+        openPullRequests: number | null;
+        latestRelease: { version: string | null; releasedAt: string | null };
+    };
+    compatibility: { registry: string; requires: Record<string, string>; dependents: number | null } | null;
+    errors: string[];
+    collectedAt: string;
+    range: number;
+    ranges: number[];
+    history: StatPoint[];
 }
 
 /**

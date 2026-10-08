@@ -6,6 +6,8 @@ namespace ArtisanPackUI\Site\Http;
 
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
 use ArtisanPackUI\Site\Http\Controllers\IconController;
+use ArtisanPackUI\Site\Http\Controllers\PackageDocsController;
+use ArtisanPackUI\Site\Http\Controllers\PackageStatsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageSyncController;
 use ArtisanPackUI\Site\Http\Controllers\SettingsController;
 use ArtisanPackUI\Site\Support\Permissions;
@@ -68,6 +70,26 @@ final class ArtisanPackUIRoutes
     public const ICON_CATALOG_LIMIT = 120;
 
     /**
+     * Requests per minute, per user, to the Docs tab's reads and reorder
+     * saves. The tab polls the import status every few seconds while an
+     * import is queued, and each reorder is a save.
+     */
+    public const DOCS_LIMIT = 60;
+
+    /**
+     * Requests per minute, per user, to the Stats tab. An uncached load
+     * calls the registry and GitHub.
+     */
+    public const STATS_LIMIT = 30;
+
+    /**
+     * The `{package}` placeholder in the per-package endpoint templates
+     * shared with the Edit Package screen, which the bundle swaps for the
+     * record's id.
+     */
+    public const PACKAGE_PLACEHOLDER = '__package__';
+
+    /**
      * @param  list<string>  $adminMiddleware
      */
     public static function register(array $adminMiddleware = self::ADMIN_MIDDLEWARE): void
@@ -94,7 +116,28 @@ final class ArtisanPackUIRoutes
                             ->middleware('throttle:' . self::VERSION_SYNC_LIMIT . ',1')
                             ->name('versions');
                     });
+
+                    // The Edit Package sync status panel and Docs tab.
+                    Route::prefix('packages/{package}')->name('packages.')->group(function (): void {
+                        Route::get('sync', [PackageSyncController::class, 'status'])->name('sync.status');
+
+                        Route::middleware('throttle:' . self::SYNC_LIMIT . ',1')->group(function (): void {
+                            Route::post('sync', [PackageSyncController::class, 'syncNow'])->name('sync.now');
+                            Route::post('docs/import-docs', [PackageDocsController::class, 'importDocs'])->name('docs.import-docs');
+                            Route::post('docs/import-changelog', [PackageDocsController::class, 'importChangelog'])->name('docs.import-changelog');
+                        });
+
+                        Route::middleware('throttle:' . self::DOCS_LIMIT . ',1')->group(function (): void {
+                            Route::get('docs/status', [PackageDocsController::class, 'status'])->name('docs.status');
+                            Route::get('docs/tree', [PackageDocsController::class, 'tree'])->name('docs.tree');
+                            Route::post('docs/reorder', [PackageDocsController::class, 'reorder'])->name('docs.reorder');
+                        });
+                    });
                 });
+
+                Route::get('packages/{package}/stats', [PackageStatsController::class, 'show'])
+                    ->middleware(['permission:' . Permissions::STATS_VIEW, 'throttle:' . self::STATS_LIMIT . ',1'])
+                    ->name('packages.stats');
 
                 // The icon picker on Edit Package. Icons are public data, so
                 // any plugin permission will do.

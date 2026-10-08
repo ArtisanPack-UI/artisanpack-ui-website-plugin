@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 
+use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageSyncState;
 use ArtisanPackUI\Site\Support\PackageIconSet;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\Http;
 /**
  * "Sync from docs" (roadmap 2.1–2.3): importing docs packages as drafts,
  * syncing versions from the registries to both sites, and syncing icons.
+ * Plus the daily run and per-package "Sync now" with its status (2.4).
  */
 
 beforeEach(function (): void {
@@ -388,8 +392,119 @@ describe('icons', function (): void {
     });
 });
 
+describe('sync now', function (): void {
+    it('links, versions and iconises one package and records a clean check', function (): void {
+        useTemporaryIconSet();
+        $this->freezeTime();
+        $package = Package::query()->create(['title' => 'Hand made', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility']);
+        $other   = Package::query()->create(['title' => 'Untouched', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/forms']);
+        $docs    = docsPackage(1, 'accessibility', ['version' => '2.4.0', 'icon' => ['raw' => 'fas.cube', 'set' => 'fas', 'name' => 'cube', 'svg' => null]]);
+        fakeDocs([$docs], [
+            'docs.example.invalid/api/v1/packages/1' => Http::response(['data' => $docs]),
+            'repo.packagist.org/p2/artisanpack-ui/accessibility.json' => Http::response(['packages' => ['artisanpack-ui/accessibility' => [['version' => '2.4.0']]]]),
+        ]);
+
+        $this->postJson("/admin/artisanpack-ui/packages/{$package->id}/sync")
+            ->assertOk()
+            ->assertJsonPath('message', 'Package synced.')
+            ->assertJsonPath('status.linked', true)
+            ->assertJsonPath('status.lastError', null)
+            ->assertJsonPath('status.lastCheckedAt', now()->toIso8601String());
+
+        $package->refresh();
+
+        expect($package->docs_package_id)->toBe(1)
+            ->and($package->version)->toBe('2.4.0')
+            ->and($package->icon)->toBe(['set' => 'fas', 'name' => 'cube'])
+            ->and($other->fresh()->version)->toBeNull()
+            ->and(PackageSyncState::query()->where('package_id', $other->id)->exists())->toBeFalse();
+
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'artisanpack-ui/forms'));
+    });
+
+    it('records and shows the last error', function (): void {
+        $package = Package::query()->create(['title' => 'Missing', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/missing']);
+        fakeDocs([], ['repo.packagist.org/*' => Http::response([], 404)]);
+
+        $this->postJson("/admin/artisanpack-ui/packages/{$package->id}/sync")
+            ->assertOk()
+            ->assertJsonPath('message', 'Sync finished with problems.')
+            ->assertJsonPath('status.lastError', fn (string $error): bool => str_contains($error, 'Packagist has no package named'));
+
+        $this->getJson("/admin/artisanpack-ui/packages/{$package->id}/sync")
+            ->assertOk()
+            ->assertJsonPath('status.linked', false)
+            ->assertJsonPath('status.lastError', fn (string $error): bool => str_contains($error, 'Packagist has no package named'));
+    });
+
+    it('still syncs the version when the docs site is down, and records why the rest failed', function (): void {
+        $package = Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility', 'docs_package_id' => 1]);
+        Http::fake([
+            'docs.example.invalid/*' => Http::response([], 500),
+            'repo.packagist.org/*'   => Http::response(['packages' => ['artisanpack-ui/accessibility' => [['version' => '2.4.0']]]]),
+        ]);
+
+        $this->postJson("/admin/artisanpack-ui/packages/{$package->id}/sync")
+            ->assertOk()
+            ->assertJsonPath('status.lastError', fn (string $error): bool => str_starts_with($error, 'Import: The docs site had a problem')
+                && str_contains($error, 'Icons: The docs site had a problem'));
+
+        expect($package->fresh()->version)->toBe('2.4.0');
+    });
+
+    it('clears the last error once a sync succeeds', function (): void {
+        $package = Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility']);
+        PackageSyncState::for($package)->fill(['last_error' => 'Old failure'])->save();
+        fakeDocs([], ['repo.packagist.org/*' => Http::response(['packages' => ['artisanpack-ui/accessibility' => [['version' => '1.0.0']]]])]);
+
+        $this->postJson("/admin/artisanpack-ui/packages/{$package->id}/sync")->assertJsonPath('status.lastError', null);
+    });
+
+    it('answers 404 for a package that does not exist', function (): void {
+        $this->postJson('/admin/artisanpack-ui/packages/999/sync')->assertNotFound();
+    });
+});
+
+describe('daily run', function (): void {
+    it('syncs every package in every batch and records each outcome', function (): void {
+        foreach (range(1, 6) as $number) {
+            Package::query()->create(['title' => "Package {$number}", 'registry' => 'packagist', 'composer_name' => "artisanpack-ui/package-{$number}"]);
+        }
+        $broken = Package::query()->create(['title' => 'Broken', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/broken']);
+        fakeDocs([docsPackage(10, 'new-one')], [
+            'repo.packagist.org/p2/artisanpack-ui/broken.json' => Http::response([], 404),
+            'repo.packagist.org/*'                           => fn (Request $request) => Http::response(['packages' => [
+                str_replace(['https://repo.packagist.org/p2/', '.json'], '', $request->url()) => [['version' => '1.0.0']],
+            ]]),
+        ]);
+
+        SyncPackages::dispatchSync();
+
+        expect(Package::query()->where('version', '1.0.0')->count())->toBe(7)
+            ->and(Package::query()->where('docs_package_id', 10)->value('status'))->toBe('draft')
+            ->and(PackageSyncState::query()->whereNotNull('last_checked_at')->count())->toBe(8)
+            ->and(PackageSyncState::for($broken)->last_error)->toContain('Packagist has no package named')
+            ->and(PackageSyncState::query()->whereNotNull('last_error')->count())->toBe(1);
+    });
+
+    it('schedules the sync and the stats snapshot daily', function (): void {
+        $events = collect(app(Schedule::class)->events())->keyBy(fn (Event $event): string => (string) $event->description);
+
+        expect($events->get('artisanpack-ui:sync-packages')?->expression)->toBe('0 3 * * *')
+            ->and($events->get('artisanpack-ui:collect-package-stats')?->expression)->toBe('0 4 * * *');
+    });
+});
+
 it('refuses the sync endpoints without the sync permission', function (string $step): void {
     actingAsUserWith([Permissions::ISSUES_MANAGE]);
 
     $this->postJson("/admin/artisanpack-ui/sync/{$step}")->assertForbidden();
 })->with(['import', 'versions', 'icons']);
+
+it('refuses the package sync status and sync now without the sync permission', function (): void {
+    actingAsUserWith([Permissions::STATS_VIEW]);
+    $package = Package::query()->create(['title' => 'A11y']);
+
+    $this->getJson("/admin/artisanpack-ui/packages/{$package->id}/sync")->assertForbidden();
+    $this->postJson("/admin/artisanpack-ui/packages/{$package->id}/sync")->assertForbidden();
+});
