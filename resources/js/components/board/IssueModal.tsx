@@ -9,9 +9,16 @@
  *
  * Writes go through the GitHub App, so GitHub shows them as the App's bot
  * rather than the admin (roadmap open question 3); the modal says so.
+ *
+ * The dialog is portalled to `<body>`: on Edit Package the Issues tab sits
+ * inside the host's `<form id="dynamic-content-form">`, and nested forms are
+ * invalid DOM. React still bubbles synthetic events through a portal to its
+ * React parents, so every form here also stops `submit` propagating, or the
+ * host's submit handler would save the package.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 
 import { apiFetch, formatDateTime, issueUrl } from '../../lib/http';
 import type { BoardEndpoints, IssueComment, IssueDetail, IssueOptions } from '../../lib/types';
@@ -164,6 +171,7 @@ export function IssueModal({
 
     async function save(event: FormEvent) {
         event.preventDefault();
+        event.stopPropagation();
 
         if (issue === null || draft === null) {
             return;
@@ -201,6 +209,7 @@ export function IssueModal({
 
     async function addComment(event: FormEvent) {
         event.preventDefault();
+        event.stopPropagation();
 
         if (comment.trim() === '') {
             return;
@@ -228,7 +237,7 @@ export function IssueModal({
         return list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
     }
 
-    return (
+    return createPortal(
         <dialog ref={dialog} className="modal" aria-labelledby={titleId} onClose={onClose}>
             <style>{MARKDOWN_CSS}</style>
             <div className="modal-box" style={{ width: '100%', maxWidth: '48rem' }}>
@@ -441,9 +450,10 @@ export function IssueModal({
                     </section>
                 )}
             </div>
-            <form method="dialog" className="modal-backdrop">
+            <form method="dialog" className="modal-backdrop" onSubmit={(event) => event.stopPropagation()}>
                 <button type="submit">Close</button>
             </form>
-        </dialog>
+        </dialog>,
+        document.body,
     );
 }

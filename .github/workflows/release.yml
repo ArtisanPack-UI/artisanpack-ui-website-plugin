@@ -46,6 +46,17 @@ jobs:
                       exit 1
                   fi
 
+            # package.json carries the same version; a mismatch means the
+            # bump was only half done.
+            - name: Check package.json matches plugin.json version
+              run: |
+                  PLUGIN_VERSION="$(php -r 'echo json_decode(file_get_contents("plugin.json"), true)["version"] ?? "";')"
+                  PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+                  if [ "${PACKAGE_VERSION}" != "${PLUGIN_VERSION}" ]; then
+                      echo "::error::package.json version ${PACKAGE_VERSION} doesn't match plugin.json version ${PLUGIN_VERSION}"
+                      exit 1
+                  fi
+
             - name: Build release ZIP
               run: OUT_DIR=build bin/build-release-zip.sh
 

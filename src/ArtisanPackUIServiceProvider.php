@@ -202,12 +202,15 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
      * Serve the built federated bundle from `dist/assets/`. Public and outside
      * the admin middleware stack: the browser fetches `remoteEntry.js` before
      * the admin shell has a page to gate, and the bundle carries no secrets.
+     *
+     * Named before the verb so the name resolves under a cached route table
+     * (see {@see ArtisanPackUIRoutes::register()}).
      */
     protected function registerAssetRoute(): void
     {
-        Route::get('/plugins/' . self::SLUG . '/assets/{path}', PluginAssetController::class)
-            ->where('path', '.*')
-            ->name('plugins.' . self::SLUG . '.assets');
+        Route::name('plugins.' . self::SLUG . '.assets')
+            ->get('/plugins/' . self::SLUG . '/assets/{path}', PluginAssetController::class)
+            ->where('path', '.*');
     }
 
     /**

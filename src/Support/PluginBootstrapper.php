@@ -16,6 +16,7 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use Symfony\Component\Routing\Exception\RouteNotFoundException;
 use Throwable;
 
 /**
@@ -54,6 +55,10 @@ final class PluginBootstrapper
      * {@see ArtisanPackUIRoutes::PACKAGE_PLACEHOLDER} for the record id, and
      * the board and issue endpoints hold the item, repo and issue
      * placeholders.
+     *
+     * The prop is only shared on admin pages, with users who pass
+     * {@see Permissions::ACCESS}; everyone else, guests included, gets an
+     * empty array, which the bundle treats as "nothing allowed".
      */
     public static function boot(Application $app): void
     {
@@ -61,20 +66,51 @@ final class PluginBootstrapper
 
         Permissions::defineGates($gate);
 
-        Inertia::share('artisanpackUi', static fn (): array => [
-            'can'       => Permissions::abilitiesFor($gate, $app->make('auth')->user()),
-            'endpoints' => [
-                'icons'        => route('artisanpack-ui.icons.index'),
-                'syncImport'   => route('artisanpack-ui.sync.import'),
-                'syncVersions' => route('artisanpack-ui.sync.versions'),
-                'syncIcons'    => route('artisanpack-ui.sync.icons'),
-                'package'      => self::packageEndpoints(),
-                'board'        => self::boardEndpoints(),
-            ],
-        ]);
+        Inertia::share('artisanpackUi', static fn (): array => self::sharedProps($app, $gate));
 
         self::registerIconSet($app);
         self::registerSchedule($app);
+    }
+
+    /**
+     * The `artisanpackUi` prop for the current request.
+     *
+     * A route name that doesn't resolve (a stale cached route table) is
+     * logged and the prop left empty, so it can never take every admin page
+     * down with it.
+     *
+     * @return array{can?: array<string, bool>, endpoints?: array<string, mixed>}
+     *
+     * @since 1.0.0
+     */
+    public static function sharedProps(Application $app, Gate $gate): array
+    {
+        $request = $app->make('request');
+        $user    = $app->make('auth')->user();
+
+        if (! $request->is('admin', 'admin/*') || null === $user || ! $gate->forUser($user)->allows(Permissions::ACCESS)) {
+            return [];
+        }
+
+        try {
+            return [
+                'can'       => Permissions::abilitiesFor($gate, $user),
+                'endpoints' => [
+                    'icons'        => route('artisanpack-ui.icons.index'),
+                    'syncImport'   => route('artisanpack-ui.sync.import'),
+                    'syncVersions' => route('artisanpack-ui.sync.versions'),
+                    'syncIcons'    => route('artisanpack-ui.sync.icons'),
+                    'package'      => self::packageEndpoints(),
+                    'board'        => self::boardEndpoints(),
+                ],
+            ];
+        } catch (RouteNotFoundException $exception) {
+            Log::warning('ArtisanPack UI plugin could not build its admin endpoints; clear the route cache with `php artisan optimize`.', [
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**
