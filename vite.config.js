@@ -19,6 +19,12 @@ import federation from '@originjs/vite-plugin-federation';
  * private hooks registry the host never reads.
  */
 export default defineConfig({
+    // Relative, because the bundle is served from the plugin's asset route
+    // (`/plugins/artisanpack-ui/assets/`), not the site root. With the
+    // default `/` base, Vite's lazy-chunk preloader requests `/assets/…`,
+    // which 404s; a relative base resolves every chunk URL against the
+    // module that imports it (`import.meta.url`).
+    base: './',
     plugins: [
         react(),
         federation({
@@ -54,7 +60,13 @@ export default defineConfig({
     ],
     build: {
         target: 'esnext',
-        outDir: 'dist',
+        // Chunks go straight into `dist/assets/` (no `assetsDir`), where the
+        // asset route and `plugin.json` expect them. The federation plugin
+        // writes expose paths into `remoteEntry.js` as base + assetsDir +
+        // chunk, resolved from `remoteEntry.js` itself, so a non-empty
+        // `assetsDir` with a relative base would point at `assets/assets/…`.
+        outDir: 'dist/assets',
+        assetsDir: '',
         cssCodeSplit: false,
         rollupOptions: {
             input: './resources/js/federation-stub.ts',
