@@ -9,6 +9,7 @@ use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 
 function gitHubClient(array $overrides = []): GitHubAppClient
@@ -65,6 +66,31 @@ it('exchanges the JWT for an installation token and caches it', function (): voi
         && '2022-11-28' === $request->header('X-GitHub-Api-Version')[0]);
 });
 
+it('caches the installation token encrypted', function (): void {
+    Http::fake(fakeTokenExchange());
+
+    $client = gitHubClient();
+
+    expect($client->installationToken())->toBe('ghs_installation');
+
+    $cached = Cache::get('artisanpack-ui:github:installation-token:' . sha1('123456|987654'));
+
+    expect($cached)->toBeString()->not->toContain('ghs_installation')
+        ->and(Crypt::decryptString($cached))->toBe('ghs_installation')
+        ->and($client->installationToken())->toBe('ghs_installation');
+
+    Http::assertSentCount(1);
+});
+
+it('mints a new token when the cached one no longer decrypts', function (): void {
+    Cache::put('artisanpack-ui:github:installation-token:' . sha1('123456|987654'), 'not-encrypted', 600);
+    Http::fake(fakeTokenExchange());
+
+    expect(gitHubClient()->installationToken())->toBe('ghs_installation');
+
+    Http::assertSentCount(1);
+});
+
 it('does not cache a token that is about to expire', function (): void {
     Http::fake([
         'api.github.com/app/installations/987654/access_tokens' => Http::response([
@@ -80,7 +106,7 @@ it('does not cache a token that is about to expire', function (): void {
 });
 
 it('retries once with a fresh token when the cached one is rejected', function (): void {
-    Cache::put('artisanpack-ui:github:installation-token:' . sha1('123456|987654'), 'ghs_revoked', 600);
+    Cache::put('artisanpack-ui:github:installation-token:' . sha1('123456|987654'), Crypt::encryptString('ghs_revoked'), 600);
 
     Http::fake([
         ...fakeTokenExchange(),
@@ -190,6 +216,26 @@ it('maps a GraphQL RATE_LIMITED error to a rate-limit exception', function (): v
     ]);
 
     expect(fn () => gitHubClient()->graphql('{ viewer { login } }'))->toThrow(GitHubRateLimitException::class);
+});
+
+it('reports a GraphQL RATE_LIMITED error with the quota spent as the primary limit', function (): void {
+    $this->travelTo(now());
+
+    Http::fake([
+        ...fakeTokenExchange(),
+        'api.github.com/graphql' => Http::response(['errors' => [['type' => 'RATE_LIMITED', 'message' => 'API rate limit exceeded']]], 200, [
+            'X-RateLimit-Remaining' => '0',
+            'X-RateLimit-Reset'     => (string) (now()->getTimestamp() + 1800),
+        ]),
+    ]);
+
+    try {
+        gitHubClient()->graphql('{ viewer { login } }');
+        $this->fail('Expected a rate-limit exception.');
+    } catch (GitHubRateLimitException $exception) {
+        expect($exception->secondary)->toBeFalse()
+            ->and($exception->retryAfter)->toBeGreaterThanOrEqual(1790)->toBeLessThanOrEqual(1800);
+    }
 });
 
 it('refuses to run unconfigured or with a bad key', function (): void {

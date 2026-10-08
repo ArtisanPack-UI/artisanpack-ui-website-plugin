@@ -9,9 +9,19 @@
  *
  * Writes go through the GitHub App, so GitHub shows them as the App's bot
  * rather than the admin (roadmap open question 3); the modal says so.
+ *
+ * The dialog is portalled to `<body>`: on Edit Package the Issues tab sits
+ * inside the host's `<form id="dynamic-content-form">`, and nested forms are
+ * invalid DOM. React still bubbles synthetic events through a portal to its
+ * React parents, so every form here also stops `submit` propagating, or the
+ * host's submit handler would save the package.
+ *
+ * Closing the modal (Escape, the Close button or the backdrop) with an
+ * unsaved edit or comment asks first.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 
 import { apiFetch, formatDateTime, issueUrl } from '../../lib/http';
 import type { BoardEndpoints, IssueComment, IssueDetail, IssueOptions } from '../../lib/types';
@@ -78,6 +88,7 @@ export function IssueModal({
     const titleId = useId();
     const [issue, setIssue] = useState<IssueDetail | null>(null);
     const [comments, setComments] = useState<IssueComment[]>([]);
+    const [commentsTotal, setCommentsTotal] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<Draft | null>(null);
@@ -85,6 +96,7 @@ export function IssueModal({
     const [saving, setSaving] = useState(false);
     const [comment, setComment] = useState('');
     const [status, setStatus] = useState<string | null>(null);
+    const [attempt, setAttempt] = useState(0);
 
     const issueEndpoint = issueUrl(endpoints.issue, repo, number);
 
@@ -104,6 +116,7 @@ export function IssueModal({
                 if (active) {
                     setIssue(response);
                     setComments(response.comments ?? []);
+                    setCommentsTotal(response.commentsTotal ?? response.comments?.length ?? 0);
                 }
             })
             .catch((loadError: unknown) => {
@@ -115,7 +128,38 @@ export function IssueModal({
         return () => {
             active = false;
         };
-    }, [issueEndpoint]);
+    }, [issueEndpoint, attempt]);
+
+    function retry() {
+        setError(null);
+        setAttempt((current) => current + 1);
+    }
+
+    /** Whether closing now would throw away an edit or a comment. */
+    function hasUnsavedWork(): boolean {
+        if (comment.trim() !== '') {
+            return true;
+        }
+
+        if (!editing || draft === null || issue === null) {
+            return false;
+        }
+
+        const original = draftFrom(issue);
+
+        return (
+            draft.title !== original.title ||
+            draft.body !== original.body ||
+            draft.milestone !== original.milestone ||
+            !sameSet(draft.labels, original.labels) ||
+            !sameSet(draft.assignees, original.assignees)
+        );
+    }
+
+    /** Ask before discarding unsaved work; true when closing may go ahead. */
+    function confirmDiscard(): boolean {
+        return !hasUnsavedWork() || window.confirm('Discard your unsaved changes to this issue?');
+    }
 
     const applyIssue = useCallback(
         (updated: IssueDetail) => {
@@ -164,6 +208,7 @@ export function IssueModal({
 
     async function save(event: FormEvent) {
         event.preventDefault();
+        event.stopPropagation();
 
         if (issue === null || draft === null) {
             return;
@@ -201,6 +246,7 @@ export function IssueModal({
 
     async function addComment(event: FormEvent) {
         event.preventDefault();
+        event.stopPropagation();
 
         if (comment.trim() === '') {
             return;
@@ -215,6 +261,7 @@ export function IssueModal({
                 body: JSON.stringify({ body: comment }),
             });
             setComments((current) => [...current, created]);
+            setCommentsTotal((current) => current + 1);
             setComment('');
             setStatus('Comment added.');
         } catch (saveError) {
@@ -228,8 +275,18 @@ export function IssueModal({
         return list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
     }
 
-    return (
-        <dialog ref={dialog} className="modal" aria-labelledby={titleId} onClose={onClose}>
+    return createPortal(
+        <dialog
+            ref={dialog}
+            className="modal"
+            aria-labelledby={titleId}
+            onClose={onClose}
+            onCancel={(event) => {
+                if (!confirmDiscard()) {
+                    event.preventDefault();
+                }
+            }}
+        >
             <style>{MARKDOWN_CSS}</style>
             <div className="modal-box" style={{ width: '100%', maxWidth: '48rem' }}>
                 <div className="flex items-start justify-between gap-3">
@@ -246,7 +303,15 @@ export function IssueModal({
                             {issue?.title ?? 'Loading issue…'}
                         </h2>
                     </div>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => dialog.current?.close()}>
+                    <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                            if (confirmDiscard()) {
+                                dialog.current?.close();
+                            }
+                        }}
+                    >
                         Close
                     </button>
                 </div>
@@ -257,9 +322,17 @@ export function IssueModal({
                 </p>
 
                 {error !== null && (
-                    <p role="alert" className="mt-3 rounded-md border border-error/40 px-3 py-2 text-sm text-error">
-                        {error}
-                    </p>
+                    <div
+                        role="alert"
+                        className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-error/40 px-3 py-2 text-sm text-error"
+                    >
+                        <p>{error}</p>
+                        {issue === null && (
+                            <button type="button" className="btn btn-sm" onClick={retry}>
+                                Try again
+                            </button>
+                        )}
+                    </div>
                 )}
                 <p aria-live="polite" className="sr-only">
                     {status ?? ''}
@@ -387,13 +460,17 @@ export function IssueModal({
                             <span className="flex gap-2">
                                 <button
                                     type="button"
-                                    className="btn btn-sm"
-                                    disabled={saving}
-                                    onClick={() =>
-                                        issue.state === 'OPEN'
+                                    className={`btn btn-sm ${saving ? 'opacity-60' : ''}`}
+                                    aria-disabled={saving}
+                                    onClick={() => {
+                                        if (saving) {
+                                            return;
+                                        }
+
+                                        void (issue.state === 'OPEN'
                                             ? patch({ state: 'closed', state_reason: 'completed' }, 'Issue closed.')
-                                            : patch({ state: 'open', state_reason: 'reopened' }, 'Issue reopened.')
-                                    }
+                                            : patch({ state: 'open', state_reason: 'reopened' }, 'Issue reopened.'));
+                                    }}
                                 >
                                     {issue.state === 'OPEN' ? 'Close issue' : 'Reopen issue'}
                                 </button>
@@ -407,7 +484,16 @@ export function IssueModal({
 
                 {issue !== null && (
                     <section aria-label="Comments" className="mt-6 border-t border-base-300/60 pt-4">
-                        <h3 className="text-sm font-semibold text-base-content">Comments ({comments.length})</h3>
+                        <h3 className="text-sm font-semibold text-base-content">Comments ({Math.max(commentsTotal, comments.length)})</h3>
+                        {commentsTotal > comments.length && (
+                            <p className="mt-1 text-xs text-base-content/60">
+                                Showing the latest {comments.length} of {commentsTotal} comments.{' '}
+                                <a href={issue.url} target="_blank" rel="noopener noreferrer" className="link">
+                                    Open on GitHub
+                                </a>{' '}
+                                to read the rest.
+                            </p>
+                        )}
                         <ol className="mt-3 space-y-3">
                             {comments.map((entry) => (
                                 <li key={entry.id} className="rounded-md border border-base-300/60 p-3">
@@ -441,9 +527,20 @@ export function IssueModal({
                     </section>
                 )}
             </div>
-            <form method="dialog" className="modal-backdrop">
+            <form
+                method="dialog"
+                className="modal-backdrop"
+                onSubmit={(event) => {
+                    event.stopPropagation();
+
+                    if (!confirmDiscard()) {
+                        event.preventDefault();
+                    }
+                }}
+            >
                 <button type="submit">Close</button>
             </form>
-        </dialog>
+        </dialog>,
+        document.body,
     );
 }

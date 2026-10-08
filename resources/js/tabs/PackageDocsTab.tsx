@@ -7,12 +7,16 @@
  *   - "Import documentation" / "Import changelog" queue the docs site's
  *     imports. Imports run on the docs site's queue, so the tab polls the
  *     status until neither is queued, then shows done or failed with the
- *     last-imported time.
+ *     last-imported time. An import this tab queued stays "Queued" until the
+ *     docs site reports a newer import time or a failure, so a status read
+ *     that lags the trigger can't flip it back and forth.
  *   - The documentation tree reorders siblings within their parent, by
  *     drag and drop or the move buttons. Each move is shown at once and
  *     saved in the background; a failed save puts the old order back.
  *     Parents can't change here: the docs site takes them from the repo's
- *     folder layout.
+ *     folder layout. The move buttons stay focusable while a save runs or
+ *     at the end of a list (`aria-disabled`), and focus follows the moved
+ *     page, so a keyboard user can press "Move down" repeatedly.
  *
  * The tab sits inside the edit screen's `<form>`, so every button is
  * `type="button"`.
@@ -31,6 +35,30 @@ const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 type ImportKind = 'docs' | 'changelog';
+
+/** An import this tab queued and is waiting on: the state it replaces. */
+interface AwaitedImport {
+    importedAt: string | null;
+    wasFailed: boolean;
+    sawQueued: boolean;
+}
+
+/**
+ * Whether the docs site has reported the outcome of an import queued after
+ * `awaited` was captured: a newer import time, or a failure that isn't the
+ * one from before.
+ */
+function isSettled(state: DocsImport, awaited: AwaitedImport): boolean {
+    if (state.status === 'failed') {
+        return !awaited.wasFailed || awaited.sawQueued;
+    }
+
+    return (
+        state.status !== 'queued' &&
+        state.importedAt !== null &&
+        (awaited.importedAt === null || Date.parse(state.importedAt) > Date.parse(awaited.importedAt))
+    );
+}
 
 const IMPORTS: { kind: ImportKind; label: string; button: string; endpoint: keyof PackageEndpoints }[] = [
     { kind: 'docs', label: 'Documentation', button: 'Import documentation', endpoint: 'importDocs' },
@@ -59,13 +87,24 @@ function ImportsCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
     const [notice, setNotice] = useState<string | null>(null);
     const [triggering, setTriggering] = useState<ImportKind | null>(null);
     const [pollTimedOut, setPollTimedOut] = useState(false);
+    const [awaiting, setAwaiting] = useState<Partial<Record<ImportKind, AwaitedImport>>>({});
+    const inFlight = useRef(false);
 
     const loadStatus = useCallback(async () => {
+        // One read at a time, so a slow response can't land after a newer one.
+        if (inFlight.current) {
+            return;
+        }
+
+        inFlight.current = true;
+
         try {
             setStatus(await apiFetch<DocsStatusResponse>(packageUrl(endpoints.docsStatus, packageId)));
             setError(null);
         } catch (loadError) {
             setError(loadError instanceof Error ? loadError.message : 'Could not load the import status.');
+        } finally {
+            inFlight.current = false;
         }
     }, [endpoints.docsStatus, packageId]);
 
@@ -73,8 +112,44 @@ function ImportsCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
         void loadStatus();
     }, [loadStatus]);
 
-    const queued =
-        status?.imports?.docs.status === 'queued' || status?.imports?.changelog.status === 'queued';
+    // Stop waiting on each import the docs site has reported an outcome for.
+    useEffect(() => {
+        const imports = status?.imports;
+
+        if (!imports) {
+            return;
+        }
+
+        setAwaiting((current) => {
+            const next: Partial<Record<ImportKind, AwaitedImport>> = {};
+            let changed = false;
+
+            for (const kind of Object.keys(current) as ImportKind[]) {
+                const awaited = current[kind]!;
+
+                if (isSettled(imports[kind], awaited)) {
+                    changed = true;
+                } else {
+                    next[kind] = imports[kind].status === 'queued' && !awaited.sawQueued ? { ...awaited, sawQueued: true } : awaited;
+                    changed ||= next[kind] !== awaited;
+                }
+            }
+
+            return changed ? next : current;
+        });
+    }, [status]);
+
+    /** What each row shows: an import this tab is waiting on reads "Queued". */
+    const imports = status?.imports
+        ? {
+              docs: awaiting.docs ? { ...status.imports.docs, status: 'queued' as const, error: null } : status.imports.docs,
+              changelog: awaiting.changelog
+                  ? { ...status.imports.changelog, status: 'queued' as const, error: null }
+                  : status.imports.changelog,
+          }
+        : null;
+
+    const queued = imports?.docs.status === 'queued' || imports?.changelog.status === 'queued';
 
     useEffect(() => {
         if (!queued) {
@@ -103,14 +178,21 @@ function ImportsCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
         setError(null);
 
         try {
-            const response = await apiFetch<{ message: string }>(url, { method: 'POST' });
+            const response = await apiFetch<{ message: string; queued: boolean }>(url, { method: 'POST' });
+            const before = status?.imports?.[kind];
 
             setNotice(response.message);
-            setStatus((current) =>
-                current?.imports
-                    ? { ...current, imports: { ...current.imports, [kind]: { ...current.imports[kind], status: 'queued', error: null } } }
-                    : current,
-            );
+
+            if (response.queued) {
+                setAwaiting((current) => ({
+                    ...current,
+                    [kind]: {
+                        importedAt: before?.importedAt ?? null,
+                        wasFailed: before?.status === 'failed',
+                        sawQueued: false,
+                    },
+                }));
+            }
         } catch (triggerError) {
             setError(triggerError instanceof Error ? triggerError.message : 'The import could not be queued.');
         } finally {
@@ -133,14 +215,14 @@ function ImportsCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
                 </p>
             )}
 
-            {status?.imports && (
+            {imports !== null && (
                 <ul className="mt-4 divide-y divide-base-300/60">
                     {IMPORTS.map((item) => (
                         <ImportRow
                             key={item.kind}
                             label={item.label}
                             button={item.button}
-                            state={status.imports![item.kind]}
+                            state={imports[item.kind]}
                             busy={triggering !== null}
                             onImport={() => trigger(item.kind, packageUrl(endpoints[item.endpoint], packageId))}
                         />
@@ -236,13 +318,36 @@ function moveTo(ids: number[], moved: number, index: number): number[] {
     return without;
 }
 
+type MoveDirection = 'up' | 'down';
+
 function ReorderCard({ endpoints, packageId }: { endpoints: PackageEndpoints; packageId: number }) {
     const [tree, setTree] = useState<DocNode[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
     const treeRef = useRef<DocNode[] | null>(null);
+    const listRef = useRef<HTMLDivElement>(null);
+    const refocus = useRef<{ id: number; direction: MoveDirection } | null>(null);
     treeRef.current = tree;
+
+    // After a move re-renders the list, put focus back on the moved page's
+    // button, or its other button if that end of the list was reached.
+    useEffect(() => {
+        const target = refocus.current;
+
+        if (target === null || listRef.current === null) {
+            return;
+        }
+
+        refocus.current = null;
+
+        const button = (direction: MoveDirection) =>
+            listRef.current?.querySelector<HTMLButtonElement>(`button[data-doc-id="${target.id}"][data-dir="${direction}"]`) ?? null;
+        const same = button(target.direction);
+        const other = button(target.direction === 'up' ? 'down' : 'up');
+
+        (same?.dataset.atEnd === 'true' && other !== null ? other : same)?.focus();
+    }, [tree]);
 
     const loadTree = useCallback(async () => {
         try {
@@ -258,12 +363,14 @@ function ReorderCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
         void loadTree();
     }, [loadTree]);
 
-    async function save(parent: number, ids: number[]) {
+    async function save(parent: number, ids: number[], focus?: { id: number; direction: MoveDirection }) {
         const previous = treeRef.current;
 
         if (previous === null) {
             return;
         }
+
+        refocus.current = focus ?? null;
 
         setTree(reorderTree(previous, parent, ids));
         setSaving(true);
@@ -297,13 +404,22 @@ function ReorderCard({ endpoints, packageId }: { endpoints: PackageEndpoints; pa
                 folder layout and can't be changed here.
             </p>
 
-            {loadError !== null && <p className="mt-4 text-sm text-error">{loadError}</p>}
+            {loadError !== null && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                    <p role="alert" className="text-sm text-error">
+                        {loadError}
+                    </p>
+                    <button type="button" className="btn btn-sm" onClick={() => void loadTree()}>
+                        Try again
+                    </button>
+                </div>
+            )}
             {tree === null && loadError === null && <p className="mt-4 text-sm text-base-content/55">Loading…</p>}
             {tree !== null && tree.length === 0 && (
                 <p className="mt-4 text-sm text-base-content/60">No documentation has been imported yet.</p>
             )}
             {tree !== null && tree.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4" ref={listRef}>
                     <SiblingList nodes={tree} parent={0} disabled={saving} onReorder={save} />
                 </div>
             )}
@@ -325,7 +441,7 @@ function SiblingList({
     nodes: DocNode[];
     parent: number;
     disabled: boolean;
-    onReorder: (parent: number, ids: number[]) => void;
+    onReorder: (parent: number, ids: number[], focus?: { id: number; direction: MoveDirection }) => void;
 }) {
     const [dragged, setDragged] = useState<number | null>(null);
     const [over, setOver] = useState<number | null>(null);
@@ -366,8 +482,15 @@ function SiblingList({
         }
     }
 
-    function move(id: number, offset: number) {
-        onReorder(parent, moveTo(ids, id, ids.indexOf(id) + offset));
+    function move(id: number, direction: MoveDirection) {
+        const index = ids.indexOf(id);
+        const target = direction === 'up' ? index - 1 : index + 1;
+
+        if (disabled || target < 0 || target >= ids.length) {
+            return;
+        }
+
+        onReorder(parent, moveTo(ids, id, target), { id, direction });
     }
 
     return (
@@ -397,19 +520,25 @@ function SiblingList({
                         <span className="min-w-0 flex-1 truncate text-sm text-base-content">{node.title}</span>
                         <button
                             type="button"
-                            className="btn btn-ghost btn-xs"
+                            className={`btn btn-ghost btn-xs ${disabled || index === 0 ? 'opacity-40' : ''}`}
                             aria-label={`Move ${node.title} up`}
-                            disabled={disabled || index === 0}
-                            onClick={() => move(node.id, -1)}
+                            aria-disabled={disabled || index === 0}
+                            data-doc-id={node.id}
+                            data-dir="up"
+                            data-at-end={index === 0}
+                            onClick={() => move(node.id, 'up')}
                         >
                             ↑
                         </button>
                         <button
                             type="button"
-                            className="btn btn-ghost btn-xs"
+                            className={`btn btn-ghost btn-xs ${disabled || index === nodes.length - 1 ? 'opacity-40' : ''}`}
                             aria-label={`Move ${node.title} down`}
-                            disabled={disabled || index === nodes.length - 1}
-                            onClick={() => move(node.id, 1)}
+                            aria-disabled={disabled || index === nodes.length - 1}
+                            data-doc-id={node.id}
+                            data-dir="down"
+                            data-at-end={index === nodes.length - 1}
+                            onClick={() => move(node.id, 'down')}
                         >
                             ↓
                         </button>

@@ -4,8 +4,10 @@
 #
 # The ZIP contains a single top-level directory (the plugin slug) whose
 # contents match what Keystone's PluginManager expects when uploading a plugin
-# archive: plugin.json at the root, the PHP source tree, activation migrations,
-# admin routes, the built federated bundle in dist/, and the user-facing docs.
+# archive: plugin.json at the root, the PHP source tree (src/, which also
+# registers the routes), activation migrations (database/), the Blade views
+# and icons (resources/views, resources/icons), the built federated bundle in
+# dist/, and the README, CHANGELOG and LICENSE.
 #
 # `git archive` produces the base tree so .gitattributes `export-ignore` rules
 # stay authoritative — dev-only files (tests, build config, package manifests)
@@ -51,7 +53,8 @@ if [[ -z "$SLUG" || -z "$VERSION" ]]; then
 fi
 
 # Timestamp every staged entry to HEAD's commit time so identical revisions
-# produce byte-comparable archives regardless of when the build ran.
+# produce byte-comparable archives regardless of when the build ran, given
+# the same dist/ (e.g. with SKIP_BUILD; a fresh npm build may differ).
 COMMIT_EPOCH="$(git log -1 --format=%ct HEAD)"
 
 OUT_DIR="${OUT_DIR:-$REPO_ROOT}"
@@ -85,8 +88,11 @@ if [[ -z "${SKIP_BUILD:-}" ]]; then
         exit 1
     fi
 
-    echo "→ Building the federated bundle (npm ci && npm run build)"
-    npm ci --no-audit --no-fund
+    # --ignore-scripts: no dependency's install hooks run during a release
+    # build. Vite and esbuild ship their binaries as optional dependencies,
+    # so the bundle builds without them.
+    echo "→ Building the federated bundle (npm ci --ignore-scripts && npm run build)"
+    npm ci --ignore-scripts --no-audit --no-fund
     npm run build
 fi
 
@@ -112,7 +118,8 @@ rm -f "$OUT"
 if command -v zip >/dev/null 2>&1; then
     # -X strips extended attributes/uid/gid, and feeding a sorted file list
     # via -@ pins the entry ordering — together these two flags make the
-    # archive byte-comparable across builds of the same revision.
+    # archive byte-comparable across builds of the same revision, given the
+    # same dist/ (e.g. SKIP_BUILD).
     (cd "$STAGE_ROOT" && find "$SLUG" -print | LC_ALL=C sort | zip -X -q -@ "$OUT")
 else
     (cd "$STAGE_ROOT" && python3 - "$OUT" "$SLUG" "$COMMIT_EPOCH" <<'PY'

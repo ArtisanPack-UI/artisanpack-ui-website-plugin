@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 
 /**
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property string|null  $latest_release
  * @property Carbon|null  $latest_release_at
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageStatSnapshot extends Model
 {
@@ -44,11 +45,25 @@ final class PackageStatSnapshot extends Model
     /**
      * Write a package's stats for one day, replacing that day's row if
      * there is one. Matched with `whereDate` because the `date` cast
-     * stores a time part on some drivers.
+     * stores a time part on some drivers. When a concurrent run inserts
+     * the day's row between the read and the insert, the write is retried
+     * once as an update of that row.
      *
      * @param  array<string, mixed>  $attributes
      */
     public static function record(int $packageId, Carbon $date, array $attributes): self
+    {
+        try {
+            return self::write($packageId, $date, $attributes);
+        } catch (UniqueConstraintViolationException) {
+            return self::write($packageId, $date, $attributes);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private static function write(int $packageId, Carbon $date, array $attributes): self
     {
         $snapshot = self::query()->where('package_id', $packageId)->whereDate('date', $date->toDateString())->first()
             ?? new self(['package_id' => $packageId, 'date' => $date->copy()->startOfDay()]);

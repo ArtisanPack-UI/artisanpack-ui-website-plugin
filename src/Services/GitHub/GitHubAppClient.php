@@ -9,10 +9,12 @@ use ArtisanPackUI\Site\Exceptions\GitHubRateLimitException;
 use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -22,8 +24,10 @@ use Illuminate\Support\Facades\Http;
  * private key authenticates as the App itself (only {@see self::app()} and
  * the token exchange use it), and is exchanged for an installation access
  * token that every {@see self::rest()} and {@see self::graphql()} call sends.
- * The installation token is cached until a minute before GitHub says it
- * expires, so a page that makes several calls exchanges once.
+ * The installation token is cached, encrypted with the app key, until a
+ * minute before GitHub says it expires, so a page that makes several calls
+ * exchanges once and the cache store never holds the org-wide token in
+ * plaintext.
  *
  * Rate limits:
  *   - Every response's `X-RateLimit-Remaining` is exposed on the
@@ -36,7 +40,7 @@ use Illuminate\Support\Facades\Http;
  * A 401 on a cached installation token (revoked, or the App reinstalled)
  * drops the token and retries once with a fresh one.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 class GitHubAppClient
 {
@@ -114,7 +118,7 @@ class GitHubAppClient
         $body = is_array($response->data) ? $response->data : [];
 
         if (! empty($body['errors']) && is_array($body['errors'])) {
-            throw $this->graphqlException($body['errors'], $response->status);
+            throw $this->graphqlException($body['errors'], $response->status, $response->rateLimitRemaining, $response->rateLimitReset);
         }
 
         return new GitHubResponse(
@@ -130,9 +134,9 @@ class GitHubAppClient
      */
     public function installationToken(): string
     {
-        $cached = $this->cache->get($this->tokenCacheKey());
+        $cached = $this->cachedInstallationToken();
 
-        if (is_string($cached) && '' !== $cached) {
+        if (null !== $cached) {
             return $cached;
         }
 
@@ -155,10 +159,36 @@ class GitHubAppClient
         $ttl = (int) Carbon::now()->diffInSeconds($expiresAt, false) - self::TOKEN_EXPIRY_MARGIN;
 
         if ($ttl > 0) {
-            $this->cache->put($this->tokenCacheKey(), $token, $ttl);
+            $this->cache->put($this->tokenCacheKey(), Crypt::encryptString($token), $ttl);
         }
 
         return $token;
+    }
+
+    /**
+     * The cached installation token, decrypted, or null. A value that no
+     * longer decrypts (the app key changed) is dropped and treated as a
+     * miss.
+     *
+     * @since 1.0.0
+     */
+    private function cachedInstallationToken(): ?string
+    {
+        $cached = $this->cache->get($this->tokenCacheKey());
+
+        if (! is_string($cached) || '' === $cached) {
+            return null;
+        }
+
+        try {
+            $token = Crypt::decryptString($cached);
+        } catch (DecryptException) {
+            $this->forgetInstallationToken();
+
+            return null;
+        }
+
+        return '' === $token ? null : $token;
     }
 
     /**
@@ -286,13 +316,21 @@ class GitHubAppClient
     }
 
     /**
+     * A `RATE_LIMITED` error with the hourly quota spent is the primary
+     * limit, which lasts until `X-RateLimit-Reset`; any other is treated as
+     * a secondary limit.
+     *
      * @param  array<int, mixed>  $errors
      */
-    private function graphqlException(array $errors, int $status): GitHubException
+    private function graphqlException(array $errors, int $status, ?int $remaining, ?int $reset): GitHubException
     {
         $first = is_array($errors[0] ?? null) ? $errors[0] : [];
 
         if ('RATE_LIMITED' === ($first['type'] ?? null)) {
+            if (0 === $remaining && null !== $reset) {
+                return GitHubRateLimitException::primary($status, max(1, $reset - Carbon::now()->getTimestamp()));
+            }
+
             return GitHubRateLimitException::secondary($status, self::DEFAULT_SECONDARY_WAIT);
         }
 

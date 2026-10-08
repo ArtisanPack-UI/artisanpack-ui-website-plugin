@@ -11,7 +11,7 @@ use Modules\Users\Models\User;
  * "Top packages": packages ranked by downloads gained, or by growth, over a
  * chosen window.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class TopPackagesWidget extends StatsWidget
 {

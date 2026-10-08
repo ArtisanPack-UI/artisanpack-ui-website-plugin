@@ -24,7 +24,7 @@ namespace ArtisanPackUI\Site\Support;
  *
  * @phpstan-type FieldDefinition array{key: string, name: string, type: string, column_type: string, description: string, order: int, options?: array<string, mixed>}
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class PackageFields
 {
@@ -118,6 +118,20 @@ final class PackageFields
                 'order'       => 90,
             ],
         ];
+    }
+
+    /**
+     * The cache key that marks these definitions as provisioned. It
+     * changes whenever a definition does, so an update that adds or
+     * retypes a field provisions again without anyone clearing the cache.
+     *
+     * @param  list<array<string, mixed>>|null  $definitions  Defaults to {@see self::definitions()}.
+     *
+     * @since 1.0.0
+     */
+    public static function provisionedMarkerKey(?array $definitions = null): string
+    {
+        return 'artisanpack-ui:fields-provisioned:' . sha1((string) json_encode($definitions ?? self::definitions()));
     }
 
     /**

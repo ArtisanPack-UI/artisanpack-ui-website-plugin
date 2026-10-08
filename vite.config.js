@@ -13,7 +13,7 @@ import federation from '@originjs/vite-plugin-federation';
  * contributes the Edit Package tabs through the host's hook filters.
  *
  * `shared` singletons align with the host's `keystoneFederationPlugin()`
- * block. Each `requiredVersion` matches the version the host advertises, so
+ * block. Each `requiredVersion` accepts the version the host advertises, so
  * the bundle reuses the host's React, Inertia and hooks registry instead of
  * loading a second copy — the classic "Invalid hook call" trap, and a
  * private hooks registry the host never reads.
@@ -47,9 +47,14 @@ export default defineConfig({
                     singleton: true,
                     requiredVersion: '^19.0.0',
                 },
+                // A range rather than the host's advertised `^2.0.0`: the host's
+                // `keystoneFederationPlugin()` shared block (vite.config.js in
+                // Keystone) advertises 2.0.0 while running 3.x, and the bundle
+                // only uses `usePage`, `Link` and `router`, which both majors
+                // provide alike.
                 '@inertiajs/react': {
                     singleton: true,
-                    requiredVersion: '^2.0.0',
+                    requiredVersion: '>=2.0.0 <4.0.0',
                 },
                 '@artisanpack-ui/hooks-js': {
                     singleton: true,
@@ -70,6 +75,15 @@ export default defineConfig({
         cssCodeSplit: false,
         rollupOptions: {
             input: './resources/js/federation-stub.ts',
+            // The stub entry is empty by design (see federation-stub.ts), so
+            // Rollup's empty-chunk warning for it is noise.
+            onwarn(warning, warn) {
+                if (warning.code === 'EMPTY_BUNDLE') {
+                    return;
+                }
+
+                warn(warning);
+            },
         },
     },
 });

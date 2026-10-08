@@ -5,7 +5,7 @@
 
 import { useId } from 'react';
 
-import type { BoardItem, GitHubLabel, IssueDetail } from '../../lib/types';
+import type { BoardItem, BoardResponse, GitHubLabel, IssueDetail } from '../../lib/types';
 
 /** The milestone filter's value for cards with no milestone. */
 export const NO_MILESTONE = '__none__';
@@ -36,6 +36,27 @@ export function filterItems(items: BoardItem[], filter: BoardFilter): BoardItem[
                 (filter.milestone === NO_MILESTONE ? item.milestone === null : item.milestone?.title === filter.milestone)) &&
             (filter.label === '' || item.labels.some((label) => label.name === filter.label)),
     );
+}
+
+/**
+ * The filter without any milestone, label or package the board no longer
+ * offers, so a filter saved against an older board can't hide every card.
+ * Package ids in `keepPackages` survive (a link's filter may name a package
+ * with no cards). Returns `filter` itself when nothing was dropped.
+ */
+export function pruneFilter<T extends BoardFilter>(filter: T, board: BoardResponse, keepPackages: number[] = []): T {
+    const milestone =
+        filter.milestone === '' || filter.milestone === NO_MILESTONE || board.milestones.includes(filter.milestone) ? filter.milestone : '';
+    const label = filter.label === '' || board.labels.some((option) => option.name === filter.label) ? filter.label : '';
+    const packages = filter.packages.filter(
+        (id) => keepPackages.includes(id) || board.packages.some((option) => option.id === id),
+    );
+
+    if (milestone === filter.milestone && label === filter.label && packages.length === filter.packages.length) {
+        return filter;
+    }
+
+    return { ...filter, milestone, label, packages };
 }
 
 function byText(a: string | null | undefined, b: string | null | undefined): number {

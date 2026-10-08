@@ -1,7 +1,7 @@
 /**
  * JSON fetch helper for the plugin's admin endpoints, mirroring the other
- * Keystone plugins: same-origin cookies, the page's CSRF token, and a typed
- * error carrying Laravel's message and validation errors.
+ * Keystone plugins: same-origin cookies, the session's CSRF token, and a
+ * typed error carrying Laravel's message and validation errors.
  */
 
 export class ApiError extends Error {
@@ -12,6 +12,21 @@ export class ApiError extends Error {
     ) {
         super(message);
     }
+}
+
+/**
+ * The `XSRF-TOKEN` cookie Laravel refreshes on every response, or null.
+ * Preferred over the `csrf-token` meta tag, which is rendered once per full
+ * page load and goes stale when an Inertia login regenerates the session.
+ */
+function xsrfCookie(): string | null {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
 function csrfToken(): string {
@@ -31,13 +46,31 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
         headers.set('Content-Type', 'application/json');
     }
 
-    const token = csrfToken();
-    if (token) {
-        headers.set('X-CSRF-TOKEN', token);
+    // Laravel checks X-CSRF-TOKEN before X-XSRF-TOKEN, so only one is sent.
+    const xsrf = xsrfCookie();
+    if (xsrf) {
+        headers.set('X-XSRF-TOKEN', xsrf);
+    } else {
+        const token = csrfToken();
+        if (token) {
+            headers.set('X-CSRF-TOKEN', token);
+        }
     }
 
     const response = await fetch(url, { credentials: 'same-origin', ...init, headers });
     const text = await response.text();
+
+    // A redirect (e.g. to two-factor enrolment) or an HTML page is never a
+    // valid answer from these JSON endpoints, even with a 2xx status. An
+    // empty 2xx body (204) is, and resolves to null.
+    const isJson = (response.headers.get('Content-Type') ?? '').includes('json');
+    if (response.ok && (response.redirected || (text.length > 0 && !isJson))) {
+        throw new ApiError('Your session needs attention. Reload the page and try again.', response.status);
+    }
+
+    if (response.status === 419 || response.status === 401) {
+        throw new ApiError('Your session expired. Reload the page and try again.', response.status);
+    }
 
     let payload: unknown = null;
     if (text.length > 0) {

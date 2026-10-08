@@ -31,7 +31,7 @@ use Illuminate\Http\Request;
  * message; {@see self::status()} reports an unlinked package as
  * `linked: false` instead, so the tab can say what to do.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageDocsController
 {

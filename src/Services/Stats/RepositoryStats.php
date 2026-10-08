@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
  * What GitHub says about a package's repo. `openIssues` excludes pull
  * requests, unlike the REST API's `open_issues_count`.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class RepositoryStats
 {

@@ -23,7 +23,7 @@ use Inertia\Response;
  *
  * @phpstan-type PageDefinition array{title: string, slug: string, parent: string|null, capability: string, order: int, action: array{class-string, string}}
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class AdminPages
 {
@@ -34,7 +34,7 @@ final class AdminPages
      * plugin permission, so a user with a single grant can reach the
      * plugin; the board's own data and actions check
      * {@see Permissions::ISSUES_MANAGE}. Settings holds the integration
-     * credentials sync runs on, so it needs {@see Permissions::SYNC}.
+     * credentials, so it needs {@see Permissions::SETTINGS_MANAGE}.
      *
      * @return list<PageDefinition>
      */
@@ -53,7 +53,7 @@ final class AdminPages
                 'title'      => __('Settings'),
                 'slug'       => self::SLUG . '/settings',
                 'parent'     => self::SLUG,
-                'capability' => Permissions::SYNC,
+                'capability' => Permissions::SETTINGS_MANAGE,
                 'order'      => 10,
                 'action'     => [SettingsController::class, 'show'],
             ],

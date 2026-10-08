@@ -12,7 +12,7 @@ use Modules\Users\Models\User;
  * or one. The settings pick the package it opens on; the widget's own
  * selector switches packages in place.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class DownloadsTrendWidget extends StatsWidget
 {

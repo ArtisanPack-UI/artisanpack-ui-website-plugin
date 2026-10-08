@@ -25,7 +25,7 @@ use Illuminate\Support\Carbon;
  * {@see PackageStats::$errors}. Once GitHub rate-limits a collector, later
  * packages skip GitHub rather than spend more of the quota.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 class PackageStatsCollector
 {

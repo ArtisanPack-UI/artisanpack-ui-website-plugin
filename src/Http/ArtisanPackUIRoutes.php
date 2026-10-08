@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Route;
  * routed by Keystone's `AdminMenuManager` instead (see
  * {@see \ArtisanPackUI\Site\Support\AdminPages}).
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class ArtisanPackUIRoutes
 {
@@ -92,6 +92,14 @@ final class ArtisanPackUIRoutes
     public const BOARD_LIMIT = 60;
 
     /**
+     * Requests per minute, per user, to the two board reads, counted apart
+     * from {@see self::BOARD_LIMIT}. An uncached read pages through the
+     * whole project, up to 30 GraphQL queries, so this keeps one admin from
+     * spending the App's hourly quota for everyone.
+     */
+    public const BOARD_READ_LIMIT = 20;
+
+    /**
      * The `{package}` placeholder in the per-package endpoint templates
      * shared with the Edit Package screen, which the bundle swaps for the
      * record's id.
@@ -116,6 +124,12 @@ final class ArtisanPackUIRoutes
     public const ISSUE_NUMBER_PATTERN = '[1-9][0-9]{0,9}';
 
     /**
+     * Register the routes. Every route is named *before* its verb
+     * (`Route::name('x')->get(...)`): under a cached route table the router
+     * is a `CompiledRouteCollection`, whose `refreshNameLookups()` does
+     * nothing, so a name attached after the verb is never indexed and
+     * `route('artisanpack-ui.*')` throws.
+     *
      * @param  list<string>  $adminMiddleware
      */
     public static function register(array $adminMiddleware = self::ADMIN_MIDDLEWARE): void
@@ -124,68 +138,74 @@ final class ArtisanPackUIRoutes
             ->prefix('admin/artisanpack-ui')
             ->name('artisanpack-ui.')
             ->group(function (): void {
-                Route::middleware('permission:' . Permissions::SYNC)->group(function (): void {
-                    Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
+                Route::middleware('permission:' . Permissions::SETTINGS_MANAGE)->group(function (): void {
+                    Route::name('settings.update')->put('settings', [SettingsController::class, 'update']);
 
                     Route::middleware('throttle:' . self::CONNECTION_TEST_LIMIT . ',1')->group(function (): void {
-                        Route::post('settings/test/docs', [SettingsController::class, 'testDocs'])->name('settings.test-docs');
-                        Route::post('settings/test/github', [SettingsController::class, 'testGitHub'])->name('settings.test-github');
+                        Route::name('settings.test-docs')->post('settings/test/docs', [SettingsController::class, 'testDocs']);
+                        Route::name('settings.test-github')->post('settings/test/github', [SettingsController::class, 'testGitHub']);
                     });
+                });
 
+                Route::middleware('permission:' . Permissions::SYNC)->group(function (): void {
                     Route::prefix('sync')->name('sync.')->group(function (): void {
                         Route::middleware('throttle:' . self::SYNC_LIMIT . ',1')->group(function (): void {
-                            Route::post('import', [PackageSyncController::class, 'import'])->name('import');
-                            Route::post('icons', [PackageSyncController::class, 'icons'])->name('icons');
+                            Route::name('import')->post('import', [PackageSyncController::class, 'import']);
+                            Route::name('icons')->post('icons', [PackageSyncController::class, 'icons']);
                         });
 
-                        Route::post('versions', [PackageSyncController::class, 'versions'])
+                        Route::name('versions')
                             ->middleware('throttle:' . self::VERSION_SYNC_LIMIT . ',1')
-                            ->name('versions');
+                            ->post('versions', [PackageSyncController::class, 'versions']);
                     });
 
                     // The Edit Package sync status panel and Docs tab.
                     Route::prefix('packages/{package}')->name('packages.')->group(function (): void {
-                        Route::get('sync', [PackageSyncController::class, 'status'])->name('sync.status');
+                        Route::name('sync.status')->get('sync', [PackageSyncController::class, 'status']);
 
                         Route::middleware('throttle:' . self::SYNC_LIMIT . ',1')->group(function (): void {
-                            Route::post('sync', [PackageSyncController::class, 'syncNow'])->name('sync.now');
-                            Route::post('docs/import-docs', [PackageDocsController::class, 'importDocs'])->name('docs.import-docs');
-                            Route::post('docs/import-changelog', [PackageDocsController::class, 'importChangelog'])->name('docs.import-changelog');
+                            Route::name('sync.now')->post('sync', [PackageSyncController::class, 'syncNow']);
+                            Route::name('docs.import-docs')->post('docs/import-docs', [PackageDocsController::class, 'importDocs']);
+                            Route::name('docs.import-changelog')->post('docs/import-changelog', [PackageDocsController::class, 'importChangelog']);
                         });
 
                         Route::middleware('throttle:' . self::DOCS_LIMIT . ',1')->group(function (): void {
-                            Route::get('docs/status', [PackageDocsController::class, 'status'])->name('docs.status');
-                            Route::get('docs/tree', [PackageDocsController::class, 'tree'])->name('docs.tree');
-                            Route::post('docs/reorder', [PackageDocsController::class, 'reorder'])->name('docs.reorder');
+                            Route::name('docs.status')->get('docs/status', [PackageDocsController::class, 'status']);
+                            Route::name('docs.tree')->get('docs/tree', [PackageDocsController::class, 'tree']);
+                            Route::name('docs.reorder')->post('docs/reorder', [PackageDocsController::class, 'reorder']);
                         });
                     });
                 });
 
                 // The kanban boards and the issue modal.
-                Route::middleware(['permission:' . Permissions::ISSUES_MANAGE, 'throttle:' . self::BOARD_LIMIT . ',1'])->group(function (): void {
-                    Route::get('board', [BoardController::class, 'index'])->name('board');
-                    Route::put('board/items/{item}/status', [BoardController::class, 'move'])
-                        ->where('item', BoardController::ITEM_ID_PATTERN)
-                        ->name('board.move');
-                    Route::get('packages/{package}/board', [BoardController::class, 'package'])->name('packages.board');
-
-                    Route::prefix('issues/{repo}')->name('issues.')->where(['repo' => '[A-Za-z0-9._-]+'])->group(function (): void {
-                        Route::get('options', [IssueController::class, 'options'])->name('options');
-                        Route::get('{number}', [IssueController::class, 'show'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('show');
-                        Route::patch('{number}', [IssueController::class, 'update'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('update');
-                        Route::post('{number}/comments', [IssueController::class, 'comment'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('comments.store');
+                Route::middleware('permission:' . Permissions::ISSUES_MANAGE)->group(function (): void {
+                    Route::middleware('throttle:' . self::BOARD_READ_LIMIT . ',1,artisanpack-ui-board-read')->group(function (): void {
+                        Route::name('board')->get('board', [BoardController::class, 'index']);
+                        Route::name('packages.board')->get('packages/{package}/board', [BoardController::class, 'package']);
                     });
                 });
 
-                Route::get('packages/{package}/stats', [PackageStatsController::class, 'show'])
+                Route::middleware(['permission:' . Permissions::ISSUES_MANAGE, 'throttle:' . self::BOARD_LIMIT . ',1'])->group(function (): void {
+                    Route::name('board.move')->put('board/items/{item}/status', [BoardController::class, 'move'])
+                        ->where('item', BoardController::ITEM_ID_PATTERN);
+
+                    Route::prefix('issues/{repo}')->name('issues.')->where(['repo' => '[A-Za-z0-9._-]+'])->group(function (): void {
+                        Route::name('options')->get('options', [IssueController::class, 'options']);
+                        Route::name('show')->get('{number}', [IssueController::class, 'show'])->where('number', self::ISSUE_NUMBER_PATTERN);
+                        Route::name('update')->patch('{number}', [IssueController::class, 'update'])->where('number', self::ISSUE_NUMBER_PATTERN);
+                        Route::name('comments.store')->post('{number}/comments', [IssueController::class, 'comment'])->where('number', self::ISSUE_NUMBER_PATTERN);
+                    });
+                });
+
+                Route::name('packages.stats')
                     ->middleware(['permission:' . Permissions::STATS_VIEW, 'throttle:' . self::STATS_LIMIT . ',1'])
-                    ->name('packages.stats');
+                    ->get('packages/{package}/stats', [PackageStatsController::class, 'show']);
 
                 // The icon picker on Edit Package. Icons are public data, so
                 // any plugin permission will do.
-                Route::get('icons', [IconController::class, 'index'])
+                Route::name('icons.index')
                     ->middleware(['permission:' . Permissions::ACCESS, 'throttle:' . self::ICON_CATALOG_LIMIT . ',1'])
-                    ->name('icons.index');
+                    ->get('icons', [IconController::class, 'index']);
             });
     }
 }

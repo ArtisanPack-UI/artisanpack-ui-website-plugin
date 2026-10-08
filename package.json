@@ -1,7 +1,7 @@
 {
     "name": "@artisanpack-ui/website-plugin",
     "private": true,
-    "version": "0.1.1",
+    "version": "1.0.0",
     "description": "Federated React bundle for the ArtisanPack UI site plugin's admin pages.",
     "type": "module",
     "scripts": {

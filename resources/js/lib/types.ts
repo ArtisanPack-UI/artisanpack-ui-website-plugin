@@ -20,7 +20,7 @@ export interface Abilities {
     sync: boolean;
     issuesManage: boolean;
     statsView: boolean;
-    apiTokensManage: boolean;
+    settingsManage: boolean;
 }
 
 /**
@@ -85,6 +85,8 @@ export interface PackageTabProps {
  */
 export interface SharedEndpoints {
     icons: string;
+    /** The host's Packages list, or null when the host has no such route. */
+    packagesList: string | null;
     syncImport: string;
     syncVersions: string;
     syncIcons: string;
@@ -295,6 +297,8 @@ export interface BoardResponse {
     milestones: string[];
     labels: GitHubLabel[];
     packages: { id: number; title: string }[];
+    /** The project has more items than one read pages through; `items` holds the first ones. */
+    truncated: boolean;
 }
 
 export interface IssueComment {
@@ -325,7 +329,10 @@ export interface IssueDetail {
     createdAt: string | null;
     updatedAt: string | null;
     closedAt: string | null;
+    /** The newest comments, oldest first; only when the issue is read, not after an edit. */
     comments?: IssueComment[];
+    /** How many comments the issue has in all, which may be more than `comments` holds. */
+    commentsTotal?: number;
 }
 
 export interface IssueOptions {

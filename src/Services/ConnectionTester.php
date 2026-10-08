@@ -20,7 +20,7 @@ use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
  *
  * @phpstan-type CheckResult array{ok: bool, message: string, details: list<string>}
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class ConnectionTester
 {

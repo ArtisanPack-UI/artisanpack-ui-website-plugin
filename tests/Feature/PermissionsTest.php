@@ -47,22 +47,39 @@ it('refuses the landing page without a plugin permission', function (): void {
     $this->get('/admin/artisanpack-ui')->assertForbidden();
 });
 
+it('refuses the landing page and icons without a plugin permission', function (): void {
+    actingAsUserWith(['artisanpack-ui.api-tokens.manage']);
+
+    $this->get('/admin/artisanpack-ui')->assertForbidden();
+    $this->getJson('/admin/artisanpack-ui/icons')->assertForbidden();
+});
+
 it('refuses the landing page to a guest', function (): void {
     $this->getJson('/admin/artisanpack-ui')->assertUnauthorized();
 });
 
-it('opens settings only with the sync permission', function (): void {
-    actingAsUserWith([Permissions::SYNC]);
+it('opens settings only with the settings permission', function (): void {
+    actingAsUserWith([Permissions::SETTINGS_MANAGE]);
     $this->get('/admin/artisanpack-ui/settings')->assertOk();
 
-    actingAsUserWith([Permissions::ISSUES_MANAGE, Permissions::STATS_VIEW, Permissions::API_TOKENS_MANAGE]);
+    actingAsUserWith([Permissions::SYNC, Permissions::ISSUES_MANAGE, Permissions::STATS_VIEW]);
     $this->get('/admin/artisanpack-ui/settings')->assertForbidden();
 });
 
-it('refuses the settings endpoints without the sync permission', function (string $method, string $uri): void {
-    actingAsUserWith([Permissions::ISSUES_MANAGE]);
+it('refuses the settings endpoints without the settings permission', function (string $method, string $uri): void {
+    actingAsUserWith([Permissions::SYNC, Permissions::ISSUES_MANAGE, Permissions::STATS_VIEW]);
 
     $this->json($method, $uri)->assertForbidden();
+})->with([
+    'save'        => ['PUT', '/admin/artisanpack-ui/settings'],
+    'test docs'   => ['POST', '/admin/artisanpack-ui/settings/test/docs'],
+    'test github' => ['POST', '/admin/artisanpack-ui/settings/test/github'],
+]);
+
+it('allows the settings endpoints with only the settings permission', function (string $method, string $uri): void {
+    actingAsUserWith([Permissions::SETTINGS_MANAGE]);
+
+    $this->json($method, $uri)->assertOk();
 })->with([
     'save'        => ['PUT', '/admin/artisanpack-ui/settings'],
     'test docs'   => ['POST', '/admin/artisanpack-ui/settings/test/docs'],
@@ -77,7 +94,7 @@ it('shares exactly the abilities the user holds with every page', function (): v
     actingAsUserWith([Permissions::SYNC, Permissions::STATS_VIEW]);
 
     $this->get('/admin/artisanpack-ui')->assertInertia(fn (Assert $page) => $page
-        ->where('can', ['sync' => true, 'issuesManage' => false, 'statsView' => true, 'apiTokensManage' => false])
+        ->where('can', ['sync' => true, 'issuesManage' => false, 'statsView' => true, 'settingsManage' => false])
         ->where('artisanpackUi.can.statsView', true)
         ->where('artisanpackUi.can.issuesManage', false));
 });

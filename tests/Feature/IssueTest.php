@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Services\GitHub\GitHubIssues;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -20,8 +22,40 @@ beforeEach(function (): void {
         'github_app_id'          => '123',
         'github_installation_id' => '456',
         'github_private_key'     => testPrivateKey(),
+        'github_project_number'  => 7,
     ]);
+
+    primeProjectCache();
 });
+
+/**
+ * Cache what a board load leaves behind for the org: the project's Status
+ * field and the repos with issues on it.
+ *
+ * @param  list<string>  $repositories
+ */
+function primeProjectCache(string $org = 'ArtisanPack-UI', array $repositories = ['accessibility']): void
+{
+    $key = sha1(strtolower($org) . '|7');
+
+    Cache::put('artisanpack-ui:board:status-field:' . $key, ['projectId' => 'PVT_project', 'fieldId' => 'PVTSSF_status', 'options' => []], 600);
+    Cache::put('artisanpack-ui:board:repositories:' . $key, array_map(fn (string $repo): string => strtolower("{$org}/{$repo}"), $repositories), 600);
+}
+
+/**
+ * GitHub's GraphQL answer for an issue's project items.
+ *
+ * @param  list<string>|null  $projects  The project ids the issue is on, or null for a pull request's number.
+ *
+ * @return array<string, mixed>
+ */
+function projectMembership(?array $projects = ['PVT_project']): array
+{
+    return ['data' => ['repository' => ['issue' => null === $projects ? null : ['projectItems' => ['nodes' => array_map(
+        fn (string $id): array => ['project' => ['id' => $id]],
+        $projects,
+    )]]]]];
+}
 
 /**
  * GitHub's REST representation of an issue.
@@ -55,6 +89,7 @@ function fakeGitHubRest(array $routes): void
 {
     Http::fake([
         'api.github.com/app/installations/*' => Http::response(['token' => 'ghs_1', 'expires_at' => now()->addHour()->toIso8601String()], 201),
+        'api.github.com/graphql'             => Http::response(projectMembership()),
         ...$routes,
     ]);
 }
@@ -85,6 +120,45 @@ it('shows an issue with its markdown rendered safely and its comments', function
         ->toContain('&lt;script&gt;')
         ->toContain('<a>bad</a>')
         ->not->toContain('href="javascript:');
+});
+
+it('renders images as links and opens links in a new tab', function (): void {
+    $html = GitHubIssues::renderMarkdown("![x](https://evil.example/p.png) and ![](https://evil.example/q.png)\n\n[y](https://example.com)\n\n<script>alert(1)</script>");
+
+    expect($html)->not->toContain('<img')
+        ->toContain('href="https://evil.example/p.png"')
+        ->toContain('>x</a>')
+        ->toContain('>image</a>')
+        ->toContain('target="_blank"')
+        ->toMatch('/<a rel="[^"]*\bnoopener\b[^"]*" target="_blank" href="https:\/\/example\.com">y<\/a>/')
+        ->toMatch('/<a rel="[^"]*\bnoreferrer\b[^"]*" target="_blank" href="https:\/\/example\.com">y<\/a>/')
+        ->not->toContain('<script>')
+        ->toContain('&lt;script&gt;');
+});
+
+it('shows the newest comments of a long thread', function (): void {
+    $comment = fn (int $id): array => ['id' => $id, 'user' => null, 'body' => "Comment {$id}", 'created_at' => '2026-10-02T10:00:00Z', 'html_url' => "https://github.com/c/{$id}"];
+
+    fakeGitHubRest([
+        'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12/comments*' => function (Request $request) use ($comment) {
+            $page = (int) $request['page'];
+
+            return Http::response(array_map($comment, range(($page - 1) * 100 + 1, min(250, $page * 100))));
+        },
+        'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12' => Http::response(restIssue(['comments' => 250])),
+    ]);
+
+    $response = $this->getJson('/admin/artisanpack-ui/issues/accessibility/12')
+        ->assertOk()
+        ->assertJsonPath('commentsTotal', 250)
+        ->assertJsonCount(100, 'comments');
+
+    expect($response->json('comments.0.id'))->toBe(151)
+        ->and($response->json('comments.99.id'))->toBe(250);
+
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '3' === (string) $request['page']);
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '2' === (string) $request['page']);
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/comments') && '1' === (string) $request['page']);
 });
 
 it('sends only the fields that changed', function (): void {
@@ -187,8 +261,26 @@ it('lists the repo\'s labels, open milestones and assignable users', function ()
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/milestones') && 'open' === $request['state']);
 });
 
+it('pages through long option lists', function (): void {
+    $label = fn (int $id): array => ['name' => "label-{$id}", 'color' => 'ffffff'];
+
+    fakeGitHubRest([
+        'api.github.com/repos/ArtisanPack-UI/accessibility/labels*' => fn (Request $request) => Http::response(
+            '1' === (string) $request['page'] ? array_map($label, range(1, 100)) : array_map($label, range(101, 105)),
+        ),
+        'api.github.com/repos/ArtisanPack-UI/accessibility/milestones*' => Http::response([]),
+        'api.github.com/repos/ArtisanPack-UI/accessibility/assignees*'  => Http::response([]),
+    ]);
+
+    $this->getJson('/admin/artisanpack-ui/issues/accessibility/options')
+        ->assertOk()
+        ->assertJsonCount(105, 'labels')
+        ->assertJsonPath('labels.104.name', 'label-105');
+});
+
 it('stays inside the configured org', function (): void {
     IntegrationSettings::current()->update(['github_organization' => 'Other-Org']);
+    primeProjectCache('Other-Org');
     fakeGitHubRest([
         'api.github.com/repos/Other-Org/accessibility/issues/12/comments*' => Http::response([]),
         'api.github.com/repos/Other-Org/accessibility/issues/12'           => Http::response(restIssue()),
@@ -215,6 +307,41 @@ it('answers 404 when GitHub can\'t find the issue', function (): void {
     ]);
 
     $this->getJson('/admin/artisanpack-ui/issues/accessibility/999')->assertNotFound();
+});
+
+it('refuses an issue that isn\'t on the org project', function (string $method, string $uri, ?array $projects): void {
+    fakeGitHubRest([
+        'api.github.com/graphql'  => Http::response(projectMembership($projects)),
+        'api.github.com/repos/*'  => Http::response(restIssue()),
+    ]);
+
+    $this->json($method, $uri, ['body' => 'x', 'title' => 'x'])->assertNotFound();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/repos/'));
+})->with([
+    'edit a pull request'           => ['PATCH', '/admin/artisanpack-ui/issues/accessibility/12', null],
+    'edit another project\'s issue' => ['PATCH', '/admin/artisanpack-ui/issues/accessibility/12', ['PVT_other']],
+    'show another project\'s issue' => ['GET', '/admin/artisanpack-ui/issues/accessibility/12', ['PVT_other']],
+    'comment on a pull request'     => ['POST', '/admin/artisanpack-ui/issues/accessibility/12/comments', null],
+]);
+
+it('remembers that an issue is on the project', function (): void {
+    fakeGitHubRest([
+        'api.github.com/repos/ArtisanPack-UI/accessibility/issues/12' => Http::response(restIssue()),
+    ]);
+
+    $this->patchJson('/admin/artisanpack-ui/issues/accessibility/12', ['title' => 'One'])->assertOk();
+    $this->patchJson('/admin/artisanpack-ui/issues/accessibility/12', ['title' => 'Two'])->assertOk();
+
+    Http::assertSentCount(4);
+});
+
+it('refuses the edit options for a repo with no issues on the project', function (): void {
+    fakeGitHubRest([]);
+
+    $this->getJson('/admin/artisanpack-ui/issues/private-repo/options')->assertNotFound();
+
+    Http::assertNothingSent();
 });
 
 it('refuses the issue endpoints without the issues permission', function (string $method, string $uri): void {

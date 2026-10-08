@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
  * The last docs or changelog import the docs site ran for a package
  * (`imports.docs` / `imports.changelog` on `PackageResource`).
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class DocsImportStatus
 {

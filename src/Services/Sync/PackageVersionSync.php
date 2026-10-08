@@ -36,7 +36,7 @@ use Illuminate\Support\Carbon;
  * packages, each its own request, to stay well inside PHP's request time
  * limit. The report's `next` is the cursor for the following batch.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class PackageVersionSync
 {

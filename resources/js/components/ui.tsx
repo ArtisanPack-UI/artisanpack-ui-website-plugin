@@ -17,10 +17,10 @@ export const CARD_CLASS =
 
 const NAV_ITEMS: { key: keyof Nav; label: string; ability?: keyof Abilities }[] = [
     { key: 'board', label: 'Packages board' },
-    { key: 'settings', label: 'Settings', ability: 'sync' },
+    { key: 'settings', label: 'Settings', ability: 'settingsManage' },
 ];
 
-const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: false, apiTokensManage: false };
+const NO_ABILITIES: Abilities = { sync: false, issuesManage: false, statsView: false, settingsManage: false };
 
 /**
  * The current user's plugin abilities from the `artisanpackUi.can` prop the

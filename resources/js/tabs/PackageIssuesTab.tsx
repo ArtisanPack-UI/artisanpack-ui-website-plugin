@@ -7,6 +7,10 @@
  * Dragging a card (or using its Status select) moves it on GitHub; clicking
  * its title opens the issue modal (5.3). Gated on
  * `artisanpack-ui.issues.manage` by the boot module and the endpoints.
+ *
+ * The tab unmounts whenever another Edit Package tab is opened, so its
+ * filters are kept per package at module level, and the board itself is
+ * cached by `useBoard`.
  */
 
 import { useMemo, useState } from 'react';
@@ -20,10 +24,23 @@ import type { PackageTabProps } from '../lib/types';
 
 const NO_FILTER: BoardFilter = { packages: [], milestone: '', label: '' };
 
+/** Each package's filters, kept while the tab is unmounted. */
+const filters = new Map<number, BoardFilter>();
+
 export default function PackageIssuesTab({ context }: PackageTabProps) {
     const endpoints = useSharedEndpoints();
     const packageId = context.record.id as number | undefined;
-    const [filter, setFilter] = useState<BoardFilter>(NO_FILTER);
+    const [filter, setFilterState] = useState<BoardFilter>(() =>
+        packageId === undefined ? NO_FILTER : (filters.get(packageId) ?? NO_FILTER),
+    );
+
+    function setFilter(next: BoardFilter) {
+        setFilterState(next);
+
+        if (packageId !== undefined) {
+            filters.set(packageId, next);
+        }
+    }
 
     // Keyed on the template string: the shared endpoints object is rebuilt
     // on every Inertia response, including a save of this screen's form.
@@ -45,6 +62,7 @@ export default function PackageIssuesTab({ context }: PackageTabProps) {
             state={state}
             endpoints={endpoints.board}
             lanes={[{ key: 'package', title: null, items }]}
+            retryable={state.errorStatus !== 422}
             emptyMessage={
                 state.board !== null && state.board.items.length > 0
                     ? 'No issues match these filters.'

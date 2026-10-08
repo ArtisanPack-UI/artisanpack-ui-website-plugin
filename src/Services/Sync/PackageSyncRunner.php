@@ -9,6 +9,7 @@ use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageSyncState;
 use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 
 /**
  * Scheduled sync and "Sync now" (roadmap 2.4): runs the import, version and
@@ -21,7 +22,7 @@ use Closure;
  * registries. Its error is recorded against every package the run covers,
  * because none of them were fully synced.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageSyncRunner
 {
@@ -94,6 +95,8 @@ final class PackageSyncRunner
                 $report->merge($step());
             } catch (IntegrationNotConfiguredException|DocsSiteException $exception) {
                 $errors[] = __(':step: :message', ['step' => $label, 'message' => $exception->getMessage()]);
+            } catch (LockTimeoutException) {
+                $errors[] = __(':step: :message', ['step' => $label, 'message' => __('Another sync was still running, so this step was skipped.')]);
             }
         }
 

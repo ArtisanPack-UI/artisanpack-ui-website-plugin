@@ -30,7 +30,7 @@ use Throwable;
  * iconRef counts as a manual choice too. Custom SVGs are still written to the
  * `apui` set either way, so the picker can offer them.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class PackageIconSync
 {

@@ -11,7 +11,7 @@ namespace ArtisanPackUI\Site\Support;
  *
  * @phpstan-type IconRefShape array{set: string, name: string}
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class IconRef
 {

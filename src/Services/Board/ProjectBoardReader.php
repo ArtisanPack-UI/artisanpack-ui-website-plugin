@@ -17,15 +17,22 @@ use Illuminate\Support\Carbon;
  *
  * Live, with no local mirror: every {@see self::read()} pages through the
  * project's items over GraphQL, {@see self::PAGE_SIZE} at a time. Only
- * issues become cards. Pull requests, draft issues and archived items are
- * skipped, because the board edits issues. Each issue's repo is mapped to
- * the package whose `github_repo` names it.
+ * issues become cards. Pull requests, draft issues, archived items and
+ * issues in repos outside the configured org are skipped, because the board
+ * edits issues and its endpoints only address repos in that org. Each
+ * issue's repo is mapped to the package whose `github_repo` names it.
  *
  * The Status field's ids, which a status change is written against, are
  * cached for {@see self::STATUS_FIELD_TTL} seconds by {@see self::statusField()}
- * so a drag doesn't spend a read first. Every full read refreshes them.
+ * so a drag doesn't spend a read first. Every full read refreshes them, and
+ * the list of repos with issues on the project ({@see self::repositories()}).
  *
- * @since 0.5.0
+ * A read pages through up to {@see self::MAX_PAGES} pages; a project larger
+ * than that comes back with {@see Board::$truncated} set.
+ *
+ * @phpstan-type RawBoard array{project: array{title: string, url: string, number: int}, status: array{projectId: string, fieldId: string, options: list<array{id: string, name: string, color: string|null}>}, nodes: list<array<string, mixed>>, repositories: list<string>, truncated: bool}
+ *
+ * @since 1.0.0
  */
 class ProjectBoardReader
 {
@@ -38,6 +45,13 @@ class ProjectBoardReader
     public const MAX_PAGES = 30;
 
     public const STATUS_FIELD_TTL = 600;
+
+    /**
+     * Seconds a full read is reused, so switching tabs or several admins
+     * opening the board don't each page through the project. The Refresh
+     * button asks for a fresh read, and writes drop the cache.
+     */
+    public const BOARD_TTL = 45;
 
     /** The single-select field whose options are the board's columns. */
     public const STATUS_FIELD = 'Status';
@@ -105,21 +119,106 @@ class ProjectBoardReader
     ) {}
 
     /**
-     * The whole project, every page of it.
+     * The whole project, every page of it, from the cache when a read in
+     * the last {@see self::BOARD_TTL} seconds left one and `$fresh` isn't
+     * set.
+     *
+     * The raw project items are cached, not the cards, so each read maps
+     * repos to the packages as they are now.
      *
      * @throws IntegrationNotConfiguredException When the GitHub App or the project number isn't saved.
      * @throws GitHubException                   When GitHub can't be read, or the project has no Status field.
      */
-    public function read(): Board
+    public function read(bool $fresh = false): Board
     {
         [$login, $number] = $this->project();
 
+        $key = $this->boardCacheKey($login, $number);
+        $raw = $fresh ? null : $this->cache->get($key);
+
+        if (! is_array($raw)) {
+            $raw = $this->fetch($login, $number);
+            $this->cache->put($key, $raw, self::BOARD_TTL);
+        }
+
+        /** @var RawBoard $raw */
         $packages = $this->packagesByRepo();
-        $query    = sprintf(self::ITEMS_QUERY, self::STATUS_FIELD_FRAGMENT, self::PAGE_SIZE);
         $items    = [];
-        $cursor   = null;
-        $project  = null;
-        $status   = null;
+
+        foreach ($raw['nodes'] as $node) {
+            $item = $this->item($node, $packages);
+
+            if (null !== $item) {
+                $items[] = $item;
+            }
+        }
+
+        return new Board(
+            $raw['project']['title'],
+            $raw['project']['url'],
+            $raw['project']['number'],
+            ProjectStatusField::fromArray($raw['status']),
+            $items,
+            $raw['truncated'],
+        );
+    }
+
+    /**
+     * Drop the cached board, so the next {@see self::read()} goes to
+     * GitHub. Called after a write changes what it would show.
+     *
+     * @since 1.0.0
+     */
+    public function forgetBoard(): void
+    {
+        [$login, $number] = $this->project();
+
+        $this->cache->forget($this->boardCacheKey($login, $number));
+    }
+
+    /**
+     * Every repo with an issue on the project, as lowercased
+     * `owner/name`, from the cache a full read leaves for
+     * {@see self::STATUS_FIELD_TTL} seconds, or from a fresh read.
+     *
+     * @return list<string>
+     *
+     * @throws IntegrationNotConfiguredException
+     * @throws GitHubException
+     *
+     * @since 1.0.0
+     */
+    public function repositories(): array
+    {
+        [$login, $number] = $this->project();
+
+        $cached = $this->cache->get($this->repositoriesCacheKey($login, $number));
+
+        if (is_array($cached)) {
+            return array_values(array_filter($cached, is_string(...)));
+        }
+
+        $raw = $this->fetch($login, $number);
+        $this->cache->put($this->boardCacheKey($login, $number), $raw, self::BOARD_TTL);
+
+        return $raw['repositories'];
+    }
+
+    /**
+     * Page through the project on GitHub. Also refreshes the cached Status
+     * field and repo list.
+     *
+     * @return RawBoard
+     */
+    private function fetch(string $login, int $number): array
+    {
+        $query        = sprintf(self::ITEMS_QUERY, self::STATUS_FIELD_FRAGMENT, self::PAGE_SIZE);
+        $nodes        = [];
+        $repositories = [];
+        $cursor       = null;
+        $project      = null;
+        $status       = null;
+        $truncated    = false;
 
         for ($page = 0; $page < self::MAX_PAGES; ++$page) {
             $project = $this->projectNode(
@@ -131,30 +230,43 @@ class ProjectBoardReader
             $connection = is_array($project['items'] ?? null) ? $project['items'] : [];
 
             foreach (is_array($connection['nodes'] ?? null) ? $connection['nodes'] : [] as $node) {
-                $item = is_array($node) ? $this->item($node, $packages) : null;
+                if (! is_array($node)) {
+                    continue;
+                }
 
-                if (null !== $item) {
-                    $items[] = $item;
+                $nodes[] = $node;
+                $repo    = $node['content']['repository']['nameWithOwner'] ?? null;
+
+                if ('Issue' === ($node['content']['__typename'] ?? null) && is_string($repo) && '' !== $repo) {
+                    $repositories[strtolower($repo)] = true;
                 }
             }
 
-            $pageInfo = is_array($connection['pageInfo'] ?? null) ? $connection['pageInfo'] : [];
-            $cursor   = is_string($pageInfo['endCursor'] ?? null) ? $pageInfo['endCursor'] : null;
+            $pageInfo  = is_array($connection['pageInfo'] ?? null) ? $connection['pageInfo'] : [];
+            $cursor    = is_string($pageInfo['endCursor'] ?? null) ? $pageInfo['endCursor'] : null;
+            $truncated = true === ($pageInfo['hasNextPage'] ?? false) && null !== $cursor;
 
-            if (true !== ($pageInfo['hasNextPage'] ?? false) || null === $cursor) {
+            if (! $truncated) {
                 break;
             }
         }
 
-        $this->cache->put($this->statusCacheKey($login, $number), $status->toArray(), self::STATUS_FIELD_TTL);
+        $repositories = array_keys($repositories);
 
-        return new Board(
-            (string) ($project['title'] ?? ''),
-            (string) ($project['url'] ?? ''),
-            (int) ($project['number'] ?? $number),
-            $status,
-            $items,
-        );
+        $this->cache->put($this->statusCacheKey($login, $number), $status->toArray(), self::STATUS_FIELD_TTL);
+        $this->cache->put($this->repositoriesCacheKey($login, $number), $repositories, self::STATUS_FIELD_TTL);
+
+        return [
+            'project' => [
+                'title'  => (string) ($project['title'] ?? ''),
+                'url'    => (string) ($project['url'] ?? ''),
+                'number' => (int) ($project['number'] ?? $number),
+            ],
+            'status'       => $status->toArray(),
+            'nodes'        => $nodes,
+            'repositories' => $repositories,
+            'truncated'    => $truncated,
+        ];
     }
 
     /**
@@ -271,7 +383,14 @@ class ProjectBoardReader
             return null;
         }
 
-        $repo   = (string) ($issue['repository']['nameWithOwner'] ?? '');
+        $repo = (string) ($issue['repository']['nameWithOwner'] ?? '');
+
+        [$owner] = explode('/', $repo, 2) + ['', ''];
+
+        if (0 !== strcasecmp($owner, $this->settings->githubOrganization())) {
+            return null;
+        }
+
         $status = is_array($node['fieldValueByName'] ?? null) ? ($node['fieldValueByName']['optionId'] ?? null) : null;
 
         return new BoardItem(
@@ -347,5 +466,15 @@ class ProjectBoardReader
     private function statusCacheKey(string $login, int $number): string
     {
         return 'artisanpack-ui:board:status-field:' . sha1(strtolower($login) . '|' . $number);
+    }
+
+    private function boardCacheKey(string $login, int $number): string
+    {
+        return 'artisanpack-ui:board:items:' . sha1(strtolower($login) . '|' . $number);
+    }
+
+    private function repositoriesCacheKey(string $login, int $number): string
+    {
+        return 'artisanpack-ui:board:repositories:' . sha1(strtolower($login) . '|' . $number);
     }
 }

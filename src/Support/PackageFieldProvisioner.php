@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
  * Host glue, so it only runs inside Keystone; the field list itself is
  * covered by the plugin's test suite.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class PackageFieldProvisioner
 {

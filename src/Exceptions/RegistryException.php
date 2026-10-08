@@ -9,6 +9,6 @@ use RuntimeException;
 /**
  * A Packagist or npm lookup failed. The message is written for an admin.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class RegistryException extends RuntimeException {}

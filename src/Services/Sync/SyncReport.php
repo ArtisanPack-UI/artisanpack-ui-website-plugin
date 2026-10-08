@@ -20,7 +20,7 @@ namespace ArtisanPackUI\Site\Services\Sync;
  * so a run can record each package's last error for the edit screen. They
  * stay server side; `toArray()` only carries the flat `messages`.
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class SyncReport
 {

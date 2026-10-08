@@ -24,7 +24,7 @@ use Illuminate\Validation\Rule;
  * cached, so the next load retries. The cache key covers the registry
  * name and repo, so editing either reads fresh figures.
  *
- * @since 0.4.0
+ * @since 1.0.0
  */
 final class PackageStatsController
 {

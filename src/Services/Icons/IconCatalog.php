@@ -21,7 +21,7 @@ use ArtisanPackUI\VisualEditor\Services\Icon\IconSvgResolver;
  * @phpstan-type IconEntry array{set: string, name: string, svg: string}
  * @phpstan-type SetEntry array{prefix: string, label: string, count: int}
  *
- * @since 0.3.0
+ * @since 1.0.0
  */
 final class IconCatalog
 {

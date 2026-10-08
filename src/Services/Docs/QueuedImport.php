@@ -9,7 +9,7 @@ namespace ArtisanPackUI\Site\Services\Docs;
  * site's queue, so a `202 Accepted` means queued, not done: poll the
  * package's {@see DocsPackage::$imports} for the outcome.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class QueuedImport
 {

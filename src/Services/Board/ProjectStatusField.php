@@ -10,7 +10,7 @@ namespace ArtisanPackUI\Site\Services\Board;
  *
  * @phpstan-type StatusOption array{id: string, name: string, color: string|null}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class ProjectStatusField
 {

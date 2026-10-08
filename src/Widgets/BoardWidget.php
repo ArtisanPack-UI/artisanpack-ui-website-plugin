@@ -20,7 +20,7 @@ use Modules\Users\Models\User;
  * widgets ({@see StatsWidget}) but gated on {@see Permissions::ISSUES_MANAGE},
  * the permission the board it links to needs.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class BoardWidget implements KeystoneAdminWidgetInterface
 {

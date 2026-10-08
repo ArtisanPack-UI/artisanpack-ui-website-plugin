@@ -10,7 +10,8 @@
         }
     ],
     "require": {
-        "php": "^8.2"
+        "php": "^8.3",
+        "ext-openssl": "*"
     },
     "require-dev": {
         "artisanpack-ui/icons": "^2.1",

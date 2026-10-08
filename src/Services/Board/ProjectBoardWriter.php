@@ -15,9 +15,10 @@ use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
  * `clearProjectV2ItemFieldValue`.
  *
  * Only the Status changes. Which package a card belongs to comes from its
- * issue's repo, which the board never edits.
+ * issue's repo, which the board never edits. A successful move drops the
+ * cached board, so the next load shows it.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class ProjectBoardWriter
 {
@@ -77,5 +78,7 @@ class ProjectBoardWriter
 
             throw $exception;
         }
+
+        $this->reader->forgetBoard();
     }
 }

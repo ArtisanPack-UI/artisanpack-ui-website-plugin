@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Models;
 
+use ArtisanPackUI\Site\Casts\SafeEncrypted;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -14,8 +15,8 @@ use Illuminate\Database\Eloquent\Model;
  * an unsaved instance until the Settings page first saves.
  *
  * The docs API token and the GitHub App ID, private key and installation ID
- * use Laravel's `encrypted` cast, so they are encrypted with the app key at
- * rest. The token and private key are secrets and never leave the server:
+ * are encrypted with the app key at rest through {@see SafeEncrypted}, which
+ * reads a value the current key can't decrypt as unset. The token and private key are secrets and never leave the server:
  * {@see \ArtisanPackUI\Site\Http\Controllers\SettingsController} only tells
  * the browser whether one is stored.
  *
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $github_organization
  * @property int|null    $github_project_number
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class IntegrationSettings extends Model
 {
@@ -109,10 +110,10 @@ final class IntegrationSettings extends Model
     protected function casts(): array
     {
         return [
-            'docs_api_token'         => 'encrypted',
-            'github_app_id'          => 'encrypted',
-            'github_private_key'     => 'encrypted',
-            'github_installation_id' => 'encrypted',
+            'docs_api_token'         => SafeEncrypted::class,
+            'github_app_id'          => SafeEncrypted::class,
+            'github_private_key'     => SafeEncrypted::class,
+            'github_installation_id' => SafeEncrypted::class,
             'github_project_number'  => 'integer',
         ];
     }

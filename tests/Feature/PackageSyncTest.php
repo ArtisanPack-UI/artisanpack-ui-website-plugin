@@ -2,18 +2,24 @@
 
 declare(strict_types=1);
 
+use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageSyncState;
+use ArtisanPackUI\Site\Services\Sync\DocsPackageImporter;
 use ArtisanPackUI\Site\Support\PackageIconSet;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 /**
  * "Sync from docs" (roadmap 2.1–2.3): importing docs packages as drafts,
@@ -492,6 +498,43 @@ describe('daily run', function (): void {
 
         expect($events->get('artisanpack-ui:sync-packages')?->expression)->toBe('0 3 * * *')
             ->and($events->get('artisanpack-ui:collect-package-stats')?->expression)->toBe('0 4 * * *');
+    });
+});
+
+describe('overlapping runs', function (): void {
+    it('makes both daily jobs unique and non-overlapping', function (string $job): void {
+        expect(new $job)->toBeInstanceOf(ShouldBeUnique::class)
+            ->and(collect((new $job)->middleware())->contains(fn (object $middleware): bool => $middleware instanceof WithoutOverlapping))->toBeTrue();
+    })->with([SyncPackages::class, CollectPackageStats::class]);
+
+    it('refuses an import while another one is running', function (): void {
+        Sleep::fake(syncWithCarbon: true);
+        fakeDocs([docsPackage(1, 'accessibility')]);
+        Cache::lock(DocsPackageImporter::LOCK, 600)->get();
+
+        $this->postJson('/admin/artisanpack-ui/sync/import')
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'A sync is already running. Try again in a minute.');
+
+        expect(Package::query()->count())->toBe(0);
+    });
+
+    it('creates each docs package once however often the import runs', function (): void {
+        fakeDocs([docsPackage(1, 'accessibility'), docsPackage(2, 'forms')]);
+
+        $this->postJson('/admin/artisanpack-ui/sync/import')->assertOk();
+        $this->postJson('/admin/artisanpack-ui/sync/import')->assertOk();
+
+        expect(Package::query()->count())->toBe(2);
+    });
+
+    it('reuses an existing sync state row', function (): void {
+        $package = Package::query()->create(['title' => 'A11y']);
+        PackageSyncState::query()->create(['package_id' => $package->id]);
+
+        PackageSyncState::for($package)->recordCheck([]);
+
+        expect(PackageSyncState::query()->count())->toBe(1);
     });
 });
 

@@ -14,7 +14,7 @@ use Throwable;
  * (0 when the site was never reached) and {@see self::$errors} carries a
  * 422's per-field messages.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class DocsSiteException extends RuntimeException
 {

@@ -10,19 +10,21 @@ use Illuminate\Contracts\Auth\Authenticatable;
 /**
  * The plugin's permissions, and the one derived Gate ability built on them.
  *
- * The four permission slugs are declared in `plugin.json`, so Keystone seeds
+ * The permission slugs are declared in `plugin.json`, so Keystone seeds
  * them as RBAC permissions on activation and they can be granted to roles
  * separately. Admins hold all of them through the host's `Gate::before`
  * bypass. Everything the plugin exposes checks one of them:
  *
- *   - {@see self::SYNC}: the Settings page and its connection checks, and
- *     everything that talks to the docs site (sync, imports, doc reorder).
+ *   - {@see self::SYNC}: everything that talks to the docs site (sync,
+ *     imports, doc reorder).
  *   - {@see self::ISSUES_MANAGE}: the kanban boards and issue edits.
  *   - {@see self::STATS_VIEW}: the Stats tab and the dashboard stats widgets.
- *   - {@see self::API_TOKENS_MANAGE}: Command Center API tokens.
+ *   - {@see self::SETTINGS_MANAGE}: edit integration settings and run
+ *     connection tests. Kept apart from {@see self::SYNC} because the
+ *     settings hold the credentials sync runs on.
  *
  * {@see self::ACCESS} is not a stored permission. It is a Gate ability that
- * passes when the user holds any of the four, and gates the plugin's nav
+ * passes when the user holds any of them, and gates the plugin's nav
  * entry and landing page so a user with only one grant can still reach it.
  *
  * Gating on the package edit screen happens client side, from the
@@ -31,7 +33,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * content-type screen (see the 0.1 spike notes in `plans/roadmap.md`).
  * The endpoints behind those tabs enforce the same permissions server side.
  *
- * @since 0.2.0
+ * @since 1.0.0
  */
 final class Permissions
 {
@@ -41,7 +43,10 @@ final class Permissions
 
     public const STATS_VIEW = 'artisanpack-ui.stats.view';
 
-    public const API_TOKENS_MANAGE = 'artisanpack-ui.api-tokens.manage';
+    /**
+     * @since 1.0.0
+     */
+    public const SETTINGS_MANAGE = 'artisanpack-ui.settings.manage';
 
     /**
      * Gate ability: the user holds at least one plugin permission.
@@ -55,7 +60,7 @@ final class Permissions
      */
     public static function all(): array
     {
-        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW, self::API_TOKENS_MANAGE];
+        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW, self::SETTINGS_MANAGE];
     }
 
     /**
@@ -73,17 +78,17 @@ final class Permissions
     /**
      * What the given user may do, keyed for the React bundle.
      *
-     * @return array{sync: bool, issuesManage: bool, statsView: bool, apiTokensManage: bool}
+     * @return array{sync: bool, issuesManage: bool, statsView: bool, settingsManage: bool}
      */
     public static function abilitiesFor(Gate $gate, ?Authenticatable $user): array
     {
         $allows = static fn (string $permission): bool => null !== $user && $gate->forUser($user)->allows($permission);
 
         return [
-            'sync'            => $allows(self::SYNC),
-            'issuesManage'    => $allows(self::ISSUES_MANAGE),
-            'statsView'       => $allows(self::STATS_VIEW),
-            'apiTokensManage' => $allows(self::API_TOKENS_MANAGE),
+            'sync'           => $allows(self::SYNC),
+            'issuesManage'   => $allows(self::ISSUES_MANAGE),
+            'statsView'      => $allows(self::STATS_VIEW),
+            'settingsManage' => $allows(self::SETTINGS_MANAGE),
         ];
     }
 }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Http\Requests;
 
+use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /**
  * Validates a save from the plugin's Settings page.
@@ -14,9 +16,15 @@ use Illuminate\Foundation\Http\FormRequest;
  * Secrets are write-only: the page never receives the stored docs API
  * token or GitHub private key, so an empty value means "keep what's
  * stored", and the `remove_*` flags clear one explicitly. Authorization is
- * the route's `permission:artisanpack-ui.sync` middleware.
+ * the route's `permission:` middleware.
  *
- * @since 0.2.0
+ * Keeping a stored secret is only allowed while it keeps going where it
+ * went before: changing the docs site's origin, or the GitHub App or
+ * installation ID, requires re-entering the token or private key (see
+ * {@see self::after()}). Otherwise anyone allowed to save settings could
+ * point the stored token at a host they control.
+ *
+ * @since 1.0.0
  */
 final class UpdateSettingsRequest extends FormRequest
 {
@@ -41,6 +49,41 @@ final class UpdateSettingsRequest extends FormRequest
             'github_organization'       => ['nullable', 'string', 'max:39', 'regex:/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/'],
             'github_project_number'     => ['nullable', 'integer', 'min:1'],
         ];
+    }
+
+    /**
+     * Require the stored secret to be re-entered when the destination it
+     * authenticates against changes.
+     *
+     * @return list<Closure(Validator): void>
+     *
+     * @since 1.0.0
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $settings = IntegrationSettings::current();
+
+            if ($this->keepsStoredSecret($settings->docs_api_token, 'docs_api_token', 'remove_docs_api_token')) {
+                $origin = self::origin($this->input('docs_base_url'));
+
+                if (null !== $origin && $origin !== self::origin($settings->docsBaseUrl())) {
+                    $validator->errors()->add('docs_api_token', __('Re-enter the API token when you change the docs site URL.'));
+                }
+            }
+
+            if ($this->keepsStoredSecret($settings->github_private_key, 'github_private_key', 'remove_github_private_key')) {
+                foreach (['github_app_id', 'github_installation_id'] as $key) {
+                    $value = self::trimmedInput($this->input($key));
+
+                    if ('' !== $value && $value !== self::trimmedInput($settings->{$key})) {
+                        $validator->errors()->add('github_private_key', __('Re-enter the private key when you change the App ID or installation ID.'));
+
+                        break;
+                    }
+                }
+            }
+        }];
     }
 
     /**
@@ -87,5 +130,41 @@ final class UpdateSettingsRequest extends FormRequest
                 $fail(__('The private key must be the PEM private key file GitHub generated for the App.'));
             }
         };
+    }
+
+    /**
+     * Whether this save keeps a stored secret as it is: one is stored, no
+     * new value was sent, and it isn't being removed.
+     */
+    private function keepsStoredSecret(?string $stored, string $key, string $removeKey): bool
+    {
+        return filled($stored) && '' === self::trimmedInput($this->input($key)) && ! $this->boolean($removeKey);
+    }
+
+    /**
+     * A URL's origin (scheme, host and port), or null for a blank or
+     * unparseable URL.
+     */
+    private static function origin(mixed $url): ?string
+    {
+        if (! is_string($url) || '' === trim($url)) {
+            return null;
+        }
+
+        $parts = parse_url(trim($url));
+
+        if (! is_array($parts) || ! isset($parts['host'])) {
+            return null;
+        }
+
+        $scheme = strtolower($parts['scheme'] ?? '');
+        $port   = $parts['port'] ?? ('https' === $scheme ? 443 : 80);
+
+        return $scheme . '://' . strtolower($parts['host']) . ':' . $port;
+    }
+
+    private static function trimmedInput(mixed $value): string
+    {
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 }

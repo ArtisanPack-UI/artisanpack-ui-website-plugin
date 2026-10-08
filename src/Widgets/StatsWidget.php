@@ -24,7 +24,7 @@ use Modules\SiteEditor\Widgets\Contracts\KeystoneAdminWidgetInterface;
  * component from the federated bundle, registered from `./boot` under the
  * widget's `extendedInfo()['component']` key.
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 abstract class StatsWidget implements KeystoneAdminWidgetInterface
 {

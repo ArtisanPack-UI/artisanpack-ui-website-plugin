@@ -16,9 +16,10 @@ use Illuminate\Http\Request;
  * global board of every package, one package's board on its Edit Package
  * Issues tab, and moving a card between Status columns.
  *
- * Read live on every load (see {@see ProjectBoardReader}).
+ * Reads reuse a board read in the last {@see ProjectBoardReader::BOARD_TTL}
+ * seconds unless the request asks for `?fresh=1` (the Refresh button).
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class BoardController
 {
@@ -29,12 +30,12 @@ final class BoardController
 
     public function __construct(private readonly ProjectBoardReader $reader) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        return self::attempt(fn (): JsonResponse => response()->json($this->reader->read()->toArray()));
+        return self::attempt(fn (): JsonResponse => response()->json($this->reader->read($request->boolean('fresh'))->toArray()));
     }
 
-    public function package(Package $package): JsonResponse
+    public function package(Request $request, Package $package): JsonResponse
     {
         $repo = trim((string) $package->github_repo);
 
@@ -44,7 +45,7 @@ final class BoardController
             ], 422);
         }
 
-        return self::attempt(fn (): JsonResponse => response()->json($this->reader->read()->forRepository($repo)->toArray()));
+        return self::attempt(fn (): JsonResponse => response()->json($this->reader->read($request->boolean('fresh'))->forRepository($repo)->toArray()));
     }
 
     /**

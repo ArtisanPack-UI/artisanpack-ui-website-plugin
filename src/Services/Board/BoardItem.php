@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  * @phpstan-type Assignee array{login: string, avatarUrl: string|null}
  * @phpstan-type PackageRef array{id: int, title: string}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 final class BoardItem
 {

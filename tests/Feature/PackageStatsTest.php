@@ -6,6 +6,7 @@ use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageStatSnapshot;
+use ArtisanPackUI\Site\Models\PackageSyncState;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -116,6 +117,21 @@ describe('daily snapshot', function (): void {
 
         Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/graphql')
             && ['owner' => 'ArtisanPack-UI', 'name' => 'accessibility'] === (array) $request['variables']);
+    });
+
+    it('drops the snapshots and sync state of deleted packages', function (): void {
+        $package = statsPackage();
+        fakeStatsSources();
+        PackageStatSnapshot::record(999, Carbon::yesterday(), ['stars' => 1]);
+        PackageSyncState::query()->create(['package_id' => 999]);
+        PackageSyncState::query()->create(['package_id' => $package->id]);
+
+        CollectPackageStats::dispatchSync();
+
+        expect(PackageStatSnapshot::query()->where('package_id', 999)->exists())->toBeFalse()
+            ->and(PackageSyncState::query()->where('package_id', 999)->exists())->toBeFalse()
+            ->and(PackageSyncState::query()->where('package_id', $package->id)->exists())->toBeTrue()
+            ->and(PackageStatSnapshot::query()->where('package_id', $package->id)->exists())->toBeTrue();
     });
 
     it('overwrites the same day instead of adding a row', function (): void {

@@ -26,7 +26,7 @@ use Illuminate\Support\Collection as BaseCollection;
  *
  * @phpstan-type PackageRef array{id: int, title: string}
  *
- * @since 0.5.0
+ * @since 1.0.0
  */
 class DashboardStats
 {

@@ -6,6 +6,7 @@ namespace ArtisanPackUI\Site\Tests;
 
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
+use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Tests\Fixtures\User;
 use Illuminate\Contracts\Auth\Access\Gate;
@@ -28,6 +29,29 @@ use Orchestra\Testbench\TestCase as BaseTestCase;
  */
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * The suite never touches real DNS: `localhost` is loopback, a
+     * `nonexistent.*` host doesn't resolve, and every other host resolves
+     * to a public documentation address.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        OutboundUrlPolicy::resolveHostsUsing(static fn (string $host): array => match (true) {
+            'localhost' === $host                   => ['127.0.0.1', '::1'],
+            str_starts_with($host, 'nonexistent.') => [],
+            default                                 => ['93.184.215.14'],
+        });
+    }
+
+    protected function tearDown(): void
+    {
+        OutboundUrlPolicy::resolveHostsUsing(null);
+
+        parent::tearDown();
+    }
+
     /**
      * @param  Application  $app
      *
