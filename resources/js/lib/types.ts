@@ -89,6 +89,19 @@ export interface SharedEndpoints {
     syncVersions: string;
     syncIcons: string;
     package: PackageEndpoints;
+    board: BoardEndpoints;
+}
+
+/**
+ * The global board and the templates a card's move and issue modal fill
+ * in; `boardUrl()` and `issueUrl()` in `./http` fill them.
+ */
+export interface BoardEndpoints {
+    index: string;
+    move: string;
+    issue: string;
+    comments: string;
+    options: string;
 }
 
 /**
@@ -104,6 +117,7 @@ export interface PackageEndpoints {
     importChangelog: string;
     reorderDocs: string;
     stats: string;
+    board: string;
 }
 
 /**
@@ -226,4 +240,142 @@ export interface SyncReport {
     /** The cursor for a batched step's next batch, or null when done. */
     next: number | null;
     messages: string[];
+}
+
+export interface GitHubLabel {
+    name: string;
+    /** Hex without the `#`, as GitHub sends it. */
+    color: string;
+}
+
+export interface GitHubMilestone {
+    number: number;
+    title: string;
+}
+
+export interface GitHubUser {
+    login: string;
+    avatarUrl: string | null;
+}
+
+/**
+ * A Status column on the org project. The "No status" column's id is null.
+ */
+export interface BoardColumn {
+    id: string | null;
+    name: string;
+    color: string | null;
+}
+
+/**
+ * One issue on the org project (see `Services/Board/BoardItem.php`).
+ */
+export interface BoardItem {
+    /** The project item's id, which a move targets. */
+    id: string;
+    statusId: string | null;
+    /** `owner/name`. */
+    repo: string;
+    number: number;
+    title: string;
+    url: string;
+    state: 'OPEN' | 'CLOSED';
+    labels: GitHubLabel[];
+    milestone: GitHubMilestone | null;
+    assignees: GitHubUser[];
+    createdAt: string | null;
+    updatedAt: string | null;
+    package: { id: number; title: string } | null;
+}
+
+export interface BoardResponse {
+    project: { title: string; url: string; number: number };
+    columns: BoardColumn[];
+    items: BoardItem[];
+    milestones: string[];
+    labels: GitHubLabel[];
+    packages: { id: number; title: string }[];
+}
+
+export interface IssueComment {
+    id: number;
+    author: GitHubUser | null;
+    /** CommonMark rendered server side with raw HTML escaped. */
+    bodyHtml: string;
+    createdAt: string | null;
+    url: string;
+}
+
+/**
+ * An issue as the issue modal shows it (see `Services/GitHub/GitHubIssues.php`).
+ */
+export interface IssueDetail {
+    repo: string;
+    number: number;
+    title: string;
+    body: string;
+    bodyHtml: string;
+    url: string;
+    state: 'OPEN' | 'CLOSED';
+    stateReason: string | null;
+    labels: GitHubLabel[];
+    milestone: GitHubMilestone | null;
+    assignees: GitHubUser[];
+    author: GitHubUser | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+    closedAt: string | null;
+    comments?: IssueComment[];
+}
+
+export interface IssueOptions {
+    labels: GitHubLabel[];
+    milestones: GitHubMilestone[];
+    assignees: GitHubUser[];
+}
+
+/**
+ * What the host's dashboard grid hands a widget body.
+ */
+export interface WidgetProps<TData> {
+    widget: { id: string; title: string; options: Record<string, unknown>; error?: boolean };
+    data: TData;
+    options: Record<string, unknown>;
+}
+
+export interface PackageRef {
+    id: number;
+    title: string;
+}
+
+export interface DownloadsKpiData {
+    metric: 'total' | 'monthly' | 'daily';
+    package: PackageRef | null;
+    value: number | null;
+    asOf: string | null;
+}
+
+export interface DownloadsTrendData {
+    range: number;
+    ranges: number[];
+    selected: string;
+    packages: PackageRef[];
+    series: Record<string, { date: string; value: number | null }[]>;
+}
+
+export interface GitHubOverviewData {
+    packages: (PackageRef & { stars: number | null; openIssues: number | null; openPullRequests: number | null })[];
+    totals: { stars: number; openIssues: number; openPullRequests: number };
+    asOf: string | null;
+}
+
+export interface TopPackagesData {
+    rankBy: 'downloads' | 'growth';
+    window: number;
+    windows: number[];
+    packages: (PackageRef & { downloads: number; growth: number | null })[];
+}
+
+export interface ReleaseFeedData {
+    releases: (PackageRef & { version: string; releasedAt: string | null })[];
 }

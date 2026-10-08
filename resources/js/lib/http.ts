@@ -63,14 +63,35 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
     return payload as T;
 }
 
-/** The id placeholder in the shared per-package endpoint templates. */
+/** The placeholders in the shared endpoint templates (see `ArtisanPackUIRoutes`). */
 const PACKAGE_PLACEHOLDER = '__package__';
+const ITEM_PLACEHOLDER = '__item__';
+const REPO_PLACEHOLDER = '__repo__';
+const ISSUE_PLACEHOLDER = '__issue__';
 
 /**
  * Fill a per-package endpoint template with the record's id.
  */
 export function packageUrl(template: string, packageId: number | string): string {
     return template.replace(PACKAGE_PLACEHOLDER, encodeURIComponent(String(packageId)));
+}
+
+/**
+ * Fill the board move template with a card's project item id.
+ */
+export function boardItemUrl(template: string, itemId: string): string {
+    return template.replace(ITEM_PLACEHOLDER, encodeURIComponent(itemId));
+}
+
+/**
+ * Fill an issue endpoint template with an issue's repo and number. `repo`
+ * is `owner/name`; the endpoints take the name, the owner being the org.
+ */
+export function issueUrl(template: string, repo: string, number?: number): string {
+    const name = repo.includes('/') ? repo.slice(repo.indexOf('/') + 1) : repo;
+    const url = template.replace(REPO_PLACEHOLDER, encodeURIComponent(name));
+
+    return number === undefined ? url : url.replace(ISSUE_PLACEHOLDER, String(number));
 }
 
 /**

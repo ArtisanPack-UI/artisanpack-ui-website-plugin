@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
+use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Services\AdminWidgetManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
@@ -27,12 +28,18 @@ use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
+use ArtisanPackUI\Site\Widgets\DownloadsKpiWidget;
+use ArtisanPackUI\Site\Widgets\DownloadsTrendWidget;
+use ArtisanPackUI\Site\Widgets\GitHubOverviewWidget;
+use ArtisanPackUI\Site\Widgets\ReleaseFeedWidget;
+use ArtisanPackUI\Site\Widgets\TopPackagesWidget;
 use ArtisanPackUI\VisualEditor\Facades\VisualEditor;
 use BladeUI\Icons\Factory as IconFactory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Modules\SiteEditor\Widgets\Contracts\KeystoneAdminWidgetInterface;
 use Throwable;
 
 final class ArtisanPackUIServiceProvider extends PluginServiceProvider
@@ -72,6 +79,7 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         $this->registerRoutes();
         $this->registerFieldTypes();
         $this->registerEditPanels();
+        $this->registerDashboardWidgets();
         $this->registerContentTypes();
         $this->registerBlocks();
         $this->registerHookSubscriptions();
@@ -277,6 +285,32 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         //     $panels[] = [ ... ];
         //     return $panels;
         // } );
+    }
+
+    /**
+     * Register the dashboard stats widgets (roadmap 4.3) with the host's
+     * {@see AdminWidgetManager}. Each widget's body is a component from the
+     * federated bundle, registered from `./boot` through
+     * `keystone.admin.dashboard.widget.registerFederated` under the
+     * widget's `extendedInfo()['component']` key; the two must match.
+     *
+     * Guarded on the host's widget interface, as Content Organizer does:
+     * the widget classes implement it, so registering them where it doesn't
+     * exist would fatal on autoload.
+     */
+    protected function registerDashboardWidgets(): void
+    {
+        if (! interface_exists(KeystoneAdminWidgetInterface::class)) {
+            return;
+        }
+
+        $widgets = $this->app->make(AdminWidgetManager::class);
+
+        $widgets->register(self::SLUG . '.downloadsKpi', DownloadsKpiWidget::class);
+        $widgets->register(self::SLUG . '.downloadsTrend', DownloadsTrendWidget::class);
+        $widgets->register(self::SLUG . '.gitHubOverview', GitHubOverviewWidget::class);
+        $widgets->register(self::SLUG . '.topPackages', TopPackagesWidget::class);
+        $widgets->register(self::SLUG . '.releaseFeed', ReleaseFeedWidget::class);
     }
 
     /**

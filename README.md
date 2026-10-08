@@ -19,8 +19,10 @@ plugins/artisanpack-ui/
 ├── resources/
 │   ├── js/                                  # Federated admin bundle (React)
 │   │   ├── boot.tsx                         # Preloaded: Edit Package tabs
+│   │   ├── components/board/                # Kanban board + issue modal
 │   │   ├── pages/                           # plugins/artisanpack-ui/{page}
-│   │   └── tabs/                            # Edit Package tab bodies
+│   │   ├── tabs/                            # Edit Package tab bodies
+│   │   └── widgets/                         # Dashboard widget bodies
 │   ├── views/blocks/                        # Server-rendered block partials
 │   └── icons/                               # `artisanpackui-*` icon set (sidebar logo)
 ├── bin/build-release-zip.sh                 # Release ZIP (injects dist/)
@@ -47,9 +49,10 @@ from the release ZIP (see **Releasing**).
 The PHP suite runs under Testbench, without a Keystone host, like the other
 first-party plugins. It covers the settings, permissions, API clients, package sync
 (including the daily run and "Sync now"), the Docs and Stats tab endpoints, the daily
-stats snapshot, and the `apui` icon set and picker catalog (with the visual editor and icons
+stats snapshot and the dashboard widgets' data, the kanban boards and issue modal
+endpoints (with GitHub faked), and the `apui` icon set and picker catalog (with the visual editor and icons
 packages as dev dependencies); Keystone-only glue (nav, the sidebar icon,
-blocks, field provisioning) is checked in a running install.
+blocks, field provisioning, dashboard widget registration) is checked in a running install.
 
 ```bash
 composer install
@@ -93,6 +96,17 @@ Once active, the admin nav gets an "ArtisanPack UI" entry pointing at
 `/admin/artisanpack-ui` (the packages board), with settings at
 `/admin/artisanpack-ui/settings`. Package edit screens gain Docs, Stats and
 Issues tabs, and a docs site sync panel in the sidebar.
+
+The packages board and each package's Issues tab read the org GitHub Project
+(v2) live, so they need the GitHub App and the project number saved in
+Settings. The project needs a single-select **Status** field: its options are
+the board's columns. Moves, edits and comments are made by the GitHub App, so
+GitHub shows them as the App's bot rather than the admin who made them.
+
+The admin dashboard's **Add widget** drawer lists five ArtisanPack UI widgets
+(downloads KPI, downloads trend, GitHub overview, top packages, release feed)
+for users with `artisanpack-ui.stats.view`. They read the daily stats
+snapshots, so they show figures as of the last stats run.
 
 ## Further reading
 

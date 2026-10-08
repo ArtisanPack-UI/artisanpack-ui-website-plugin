@@ -51,7 +51,9 @@ final class PluginBootstrapper
      * to gate themselves (the boot module can't read page props when it
      * registers them), together with the endpoints those call. Per-package
      * endpoints are templates holding
-     * {@see ArtisanPackUIRoutes::PACKAGE_PLACEHOLDER} for the record id.
+     * {@see ArtisanPackUIRoutes::PACKAGE_PLACEHOLDER} for the record id, and
+     * the board and issue endpoints hold the item, repo and issue
+     * placeholders.
      */
     public static function boot(Application $app): void
     {
@@ -67,6 +69,7 @@ final class PluginBootstrapper
                 'syncVersions' => route('artisanpack-ui.sync.versions'),
                 'syncIcons'    => route('artisanpack-ui.sync.icons'),
                 'package'      => self::packageEndpoints(),
+                'board'        => self::boardEndpoints(),
             ],
         ]);
 
@@ -75,7 +78,7 @@ final class PluginBootstrapper
     }
 
     /**
-     * @return array{syncStatus: string, syncNow: string, docsStatus: string, docsTree: string, importDocs: string, importChangelog: string, reorderDocs: string, stats: string}
+     * @return array{syncStatus: string, syncNow: string, docsStatus: string, docsTree: string, importDocs: string, importChangelog: string, reorderDocs: string, stats: string, board: string}
      */
     private static function packageEndpoints(): array
     {
@@ -90,6 +93,29 @@ final class PluginBootstrapper
             'importChangelog' => $template('artisanpack-ui.packages.docs.import-changelog'),
             'reorderDocs'     => $template('artisanpack-ui.packages.docs.reorder'),
             'stats'           => $template('artisanpack-ui.packages.stats'),
+            'board'           => $template('artisanpack-ui.packages.board'),
+        ];
+    }
+
+    /**
+     * The global board, and the templates a card's move and issue modal
+     * fill in.
+     *
+     * @return array{index: string, move: string, issue: string, comments: string, options: string}
+     */
+    private static function boardEndpoints(): array
+    {
+        $issue = [
+            'repo'   => ArtisanPackUIRoutes::REPO_PLACEHOLDER,
+            'number' => ArtisanPackUIRoutes::ISSUE_PLACEHOLDER,
+        ];
+
+        return [
+            'index'    => route('artisanpack-ui.board'),
+            'move'     => route('artisanpack-ui.board.move', ['item' => ArtisanPackUIRoutes::ITEM_PLACEHOLDER]),
+            'issue'    => route('artisanpack-ui.issues.show', $issue),
+            'comments' => route('artisanpack-ui.issues.comments.store', $issue),
+            'options'  => route('artisanpack-ui.issues.options', ['repo' => ArtisanPackUIRoutes::REPO_PLACEHOLDER]),
         ];
     }
 

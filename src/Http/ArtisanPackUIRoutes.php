@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Http;
 
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
+use ArtisanPackUI\Site\Http\Controllers\BoardController;
 use ArtisanPackUI\Site\Http\Controllers\IconController;
+use ArtisanPackUI\Site\Http\Controllers\IssueController;
 use ArtisanPackUI\Site\Http\Controllers\PackageDocsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageStatsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageSyncController;
@@ -83,11 +85,35 @@ final class ArtisanPackUIRoutes
     public const STATS_LIMIT = 30;
 
     /**
+     * Requests per minute, per user, to the boards and the issue modal.
+     * Each is a live GitHub call (a board load pages through the whole
+     * project), and a busy triage session moves and opens many cards.
+     */
+    public const BOARD_LIMIT = 60;
+
+    /**
      * The `{package}` placeholder in the per-package endpoint templates
      * shared with the Edit Package screen, which the bundle swaps for the
      * record's id.
      */
     public const PACKAGE_PLACEHOLDER = '__package__';
+
+    /**
+     * The `{item}`, `{repo}` and `{number}` placeholders in the shared board
+     * and issue endpoint templates, which the bundle swaps for a card's
+     * project item id, repo name and issue number.
+     */
+    public const ITEM_PLACEHOLDER = '__item__';
+
+    public const REPO_PLACEHOLDER = '__repo__';
+
+    public const ISSUE_PLACEHOLDER = '__issue__';
+
+    /**
+     * An issue number. Bounded so an over-long one is a 404 rather than an
+     * integer overflow in the controller.
+     */
+    public const ISSUE_NUMBER_PATTERN = '[1-9][0-9]{0,9}';
 
     /**
      * @param  list<string>  $adminMiddleware
@@ -132,6 +158,22 @@ final class ArtisanPackUIRoutes
                             Route::get('docs/tree', [PackageDocsController::class, 'tree'])->name('docs.tree');
                             Route::post('docs/reorder', [PackageDocsController::class, 'reorder'])->name('docs.reorder');
                         });
+                    });
+                });
+
+                // The kanban boards and the issue modal.
+                Route::middleware(['permission:' . Permissions::ISSUES_MANAGE, 'throttle:' . self::BOARD_LIMIT . ',1'])->group(function (): void {
+                    Route::get('board', [BoardController::class, 'index'])->name('board');
+                    Route::put('board/items/{item}/status', [BoardController::class, 'move'])
+                        ->where('item', BoardController::ITEM_ID_PATTERN)
+                        ->name('board.move');
+                    Route::get('packages/{package}/board', [BoardController::class, 'package'])->name('packages.board');
+
+                    Route::prefix('issues/{repo}')->name('issues.')->where(['repo' => '[A-Za-z0-9._-]+'])->group(function (): void {
+                        Route::get('options', [IssueController::class, 'options'])->name('options');
+                        Route::get('{number}', [IssueController::class, 'show'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('show');
+                        Route::patch('{number}', [IssueController::class, 'update'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('update');
+                        Route::post('{number}/comments', [IssueController::class, 'comment'])->where('number', self::ISSUE_NUMBER_PATTERN)->name('comments.store');
                     });
                 });
 
