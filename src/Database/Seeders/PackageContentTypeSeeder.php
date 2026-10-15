@@ -9,7 +9,10 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Support\PackageContentType;
+use ArtisanPackUI\Site\Support\PackageContentTypeProvisioner;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
+use ArtisanPackUI\Site\Support\PackageFields;
 use Modules\ContentModel\Support\ContentTypeTables;
 use RuntimeException;
 
@@ -19,16 +22,21 @@ use RuntimeException;
  * admin runs when a human creates a type through the UI (see
  * {@see \Modules\ContentModel\Http\Controllers\ContentTypeController::store()}
  * and its `ensureRecordsTable()` helper) — then registers the package
- * custom fields (see {@see \ArtisanPackUI\Site\Support\PackageFields}).
+ * custom fields (see {@see \ArtisanPackUI\Site\Support\PackageFields}),
+ * then brings the type's supports flags and taxonomies up to date (see
+ * {@see PackageContentType}).
  *
  * Idempotent — safe to re-run.
  */
 final class PackageContentTypeSeeder extends Seeder
 {
-    private const SLUG    = 'package';
-    private const SUPPORTS = ['title', 'editor', 'excerpt', 'featured_image'];
+    private const SLUG = PackageFields::CONTENT_TYPE;
 
-    public function run(ContentTypeManager $manager, PackageFieldProvisioner $fields): void
+    public function run(
+        ContentTypeManager $manager,
+        PackageFieldProvisioner $fields,
+        PackageContentTypeProvisioner $contentType,
+    ): void
     {
         $tableName = ContentTypeTables::derive(self::SLUG);
 
@@ -41,7 +49,7 @@ final class PackageContentTypeSeeder extends Seeder
             'hierarchical'  => false,
             'has_archive'   => true,
             'archive_slug'  => 'packages',
-            'supports'      => self::SUPPORTS,
+            'supports'      => PackageContentType::SUPPORTS,
             'public'        => true,
             'show_in_admin' => true,
             'icon'          => 'fas.cube',
@@ -52,9 +60,11 @@ final class PackageContentTypeSeeder extends Seeder
             $manager->createContentType($payload);
         }
 
-        $this->ensureRecordsTable($tableName, self::SUPPORTS);
+        $this->ensureRecordsTable($tableName, PackageContentType::SUPPORTS);
 
         $fields->provision($tableName);
+
+        $contentType->provision();
     }
 
     /**

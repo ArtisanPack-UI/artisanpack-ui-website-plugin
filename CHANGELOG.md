@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Package taxonomies.** Package Categories (hierarchical) and Package Tags
+  (flat) taxonomies bound to the `package` content type, so Edit Package
+  shows their term pickers.
+- **SEO on packages.** The `package` content type now supports `seo`, which
+  adds the SEO and SEO insights panels to Edit Package.
+
+Both are provisioned on boot, existing installs included. Any supports flags
+an admin added are kept, as are existing taxonomies with the same slugs.
+
 ## [1.0.0] - 2026-10-08
 
 The plugin becomes the admin hub for ArtisanPack UI packages: syncing with the
