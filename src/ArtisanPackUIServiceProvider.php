@@ -25,8 +25,9 @@ use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
 use ArtisanPackUI\Site\Support\AdminPages;
 use ArtisanPackUI\Site\Support\IconPickerField;
+use ArtisanPackUI\Site\Support\PackageContentType;
+use ArtisanPackUI\Site\Support\PackageContentTypeProvisioner;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
-use ArtisanPackUI\Site\Support\PackageFields;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use ArtisanPackUI\Site\Widgets\BoardWidget;
@@ -91,12 +92,13 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     }
 
     /**
-     * Idempotently provision the `package` content type and its custom
-     * fields, so the CPT survives DB resets without needing a manual
-     * `db:seed`, and a changed field type reaches existing installs.
+     * Idempotently provision the `package` content type, its custom fields,
+     * supports flags and taxonomies, so the CPT survives DB resets without
+     * needing a manual `db:seed`, and a changed definition reaches existing
+     * installs.
      *
      * Once the current definitions are in place a marker keyed on them
-     * ({@see PackageFields::provisionedMarkerKey()}) is cached forever, so
+     * ({@see PackageContentType::provisionedMarkerKey()}) is cached forever, so
      * later requests skip the database entirely; a release that changes a
      * definition changes the key and provisions again. After resetting the
      * database without clearing the cache, run `php artisan cache:clear`.
@@ -109,21 +111,22 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
     protected function registerContentTypes(): void
     {
         try {
-            $marker = PackageFields::provisionedMarkerKey();
+            $marker = PackageContentType::provisionedMarkerKey();
 
             if (Cache::has($marker) || Cache::has(self::PROVISIONING_BACKOFF_KEY)) {
                 return;
             }
 
-            if (! Schema::hasTable('content_types') || ! Schema::hasTable('custom_fields')) {
+            if (! Schema::hasTable('content_types') || ! Schema::hasTable('custom_fields') || ! Schema::hasTable('taxonomies')) {
                 return;
             }
 
-            $fields = $this->app->make(PackageFieldProvisioner::class);
+            $fields      = $this->app->make(PackageFieldProvisioner::class);
+            $contentType = $this->app->make(PackageContentTypeProvisioner::class);
 
-            if ($fields->isOutdated()) {
+            if ($fields->isOutdated() || $contentType->isOutdated()) {
                 $this->app->make(PackageContentTypeSeeder::class)
-                    ->run($this->app->make(ContentTypeManager::class), $fields);
+                    ->run($this->app->make(ContentTypeManager::class), $fields, $contentType);
             }
 
             Cache::forever($marker, true);
