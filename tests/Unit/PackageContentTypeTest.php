@@ -32,3 +32,12 @@ it('lists only the taxonomies still to create', function (): void {
         ->toBe([PackageContentType::TAG_TAXONOMY])
         ->and(PackageContentType::missingTaxonomies([PackageContentType::CATEGORY_TAXONOMY, PackageContentType::TAG_TAXONOMY]))->toBe([]);
 });
+
+it('flags a package taxonomy slug bound to another content type', function (): void {
+    expect(PackageContentType::taxonomyCollisions([
+        PackageContentType::CATEGORY_TAXONOMY => 'post',
+        PackageContentType::TAG_TAXONOMY      => 'package',
+        'unrelated'                           => 'post',
+    ]))->toBe([PackageContentType::CATEGORY_TAXONOMY])
+        ->and(PackageContentType::taxonomyCollisions([PackageContentType::TAG_TAXONOMY => 'package']))->toBe([]);
+});

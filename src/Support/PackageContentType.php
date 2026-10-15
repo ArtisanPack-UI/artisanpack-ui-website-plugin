@@ -86,6 +86,28 @@ final class PackageContentType
     }
 
     /**
+     * The package taxonomy slugs already taken by another content type.
+     * Taxonomy slugs are unique across types, so these can't be created
+     * for `package`, and Keystone only shows a type the taxonomies bound
+     * to it.
+     *
+     * @param  array<string, string>  $owners  Taxonomy slug → the `content_type_slug` it's bound to.
+     *
+     * @return list<string>
+     */
+    public static function taxonomyCollisions(array $owners): array
+    {
+        $collisions = [];
+        foreach (array_column(self::taxonomies(), 'slug') as $slug) {
+            if (isset($owners[$slug]) && PackageFields::CONTENT_TYPE !== $owners[$slug]) {
+                $collisions[] = $slug;
+            }
+        }
+
+        return $collisions;
+    }
+
+    /**
      * Cache key marking the whole package type, fields included, as
      * provisioned. Keyed on every definition, so a release that changes a
      * field, a supports flag or a taxonomy provisions again.
