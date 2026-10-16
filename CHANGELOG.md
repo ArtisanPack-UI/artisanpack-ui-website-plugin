@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Copy Command prompt has its own element.** The prompt prefix (`$` by
+  default) renders as `<span class="ap-clipboard__prompt" aria-hidden="true">`
+  inside the command's `<code>`, so themes can colour it apart from the
+  command (the design system shows it in the secondary colour) and screen
+  readers announce only the command. The copied value is unchanged.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added
