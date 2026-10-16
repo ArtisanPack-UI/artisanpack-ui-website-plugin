@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command (the design system shows it in the secondary colour) and screen
   readers announce only the command. The copied value is unchanged.
 
+### Fixed
+
+- **Copy Command prompt default.** A block saved without a `prefix`
+  attribute rendered no prompt, although the attribute's declared default is
+  `$`. The renderer now falls back to `$`; a prefix cleared in the editor
+  (saved as an empty string) still renders none.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

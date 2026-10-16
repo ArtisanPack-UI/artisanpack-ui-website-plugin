@@ -94,7 +94,7 @@ final class CopyCommandBlock
     {
         return $this->views->make('site::blocks.copy-command', [
             'command'     => (string) ($attrs['command'] ?? ''),
-            'prefix'      => (string) ($attrs['prefix'] ?? ''),
+            'prefix'      => (string) ($attrs['prefix'] ?? '$'),
             'buttonLabel' => (string) ($attrs['buttonLabel'] ?? 'Copy'),
             'copiedLabel' => (string) ($attrs['copiedLabel'] ?? 'Copied'),
         ])->render();

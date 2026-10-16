@@ -28,6 +28,12 @@ it('wraps the prompt prefix in its own span, hidden from screen readers', functi
     expect($html)->toContain('<code class="ap-clipboard__value"><span class="ap-clipboard__prompt" aria-hidden="true">$</span> composer require artisanpack-ui/icons</code>');
 });
 
+it('falls back to the declared $ prefix when the attribute is unset', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons']);
+
+    expect($html)->toContain('<span class="ap-clipboard__prompt" aria-hidden="true">$</span> composer require artisanpack-ui/icons');
+});
+
 it('omits the prompt span when the prefix is blank', function (): void {
     $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons', 'prefix' => '']);
 
