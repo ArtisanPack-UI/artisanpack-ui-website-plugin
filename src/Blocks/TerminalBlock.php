@@ -15,6 +15,12 @@ use Illuminate\Contracts\View\Factory as ViewFactory;
  *
  * Prefixes: `$ ` = command, `✓ ` = success output, `# ` = comment, blank line
  * = blank; everything else renders as neutral output.
+ *
+ * Declares color, border (including gradient borders) and shadow supports;
+ * visual-editor merges them, plus Effects, into the root element on render.
+ * The root carries `wp-block-artisanpack-terminal` so block style variations
+ * and theme defaults target the same element on the front end as the
+ * editor's block wrapper does in the canvas.
  */
 final class TerminalBlock
 {
@@ -88,6 +94,19 @@ TXT;
                     'margin'  => ['top', 'bottom'],
                     'padding' => true,
                 ],
+                'color' => [
+                    'gradients'                     => true,
+                    '__experimentalDefaultControls' => ['background' => true, 'text' => true],
+                ],
+                '__experimentalBorder' => [
+                    'color'                         => true,
+                    'radius'                        => true,
+                    'style'                         => true,
+                    'width'                         => true,
+                    'gradient'                      => true,
+                    '__experimentalDefaultControls' => ['color' => true, 'radius' => true, 'width' => true],
+                ],
+                'shadow' => true,
             ],
         ];
     }

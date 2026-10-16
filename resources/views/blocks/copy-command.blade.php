@@ -4,7 +4,7 @@
     /** @var string $buttonLabel */
     /** @var string $copiedLabel */
 @endphp
-<div class="ap-clipboard" data-clipboard data-copied-label="{{ $copiedLabel }}">
+<div class="wp-block-artisanpack-copy-command ap-clipboard" data-clipboard data-copied-label="{{ $copiedLabel }}">
     <code class="ap-clipboard__value">@if ($prefix !== ''){{ $prefix }} @endif{{ $command }}</code>
     <button
         type="button"

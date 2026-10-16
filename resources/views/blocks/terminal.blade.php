@@ -4,7 +4,7 @@
     /** @var string $label */
     /** @var list<array{type:string,content:string}> $lines */
 @endphp
-<div class="ap-terminal ap-terminal--{{ $chromeStyle }}">
+<div class="wp-block-artisanpack-terminal ap-terminal ap-terminal--{{ $chromeStyle }}">
     @if ($showChrome)
         <div class="ap-terminal__chrome">
             <span class="ap-terminal__dots" aria-hidden="true"><span></span><span></span><span></span></span>

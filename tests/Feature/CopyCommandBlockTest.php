@@ -27,3 +27,17 @@ it('escapes the command', function (): void {
 
     expect($html)->not->toContain('<script>')->toContain('&lt;script&gt;');
 });
+
+it('puts the block class on the root so supports and variations land on the chip', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons']);
+
+    expect($html)->toContain('<div class="wp-block-artisanpack-copy-command ap-clipboard"');
+});
+
+it('declares color, gradient border and shadow supports', function (): void {
+    $supports = app(CopyCommandBlock::class)->metadata()['supports'];
+
+    expect($supports['color'])->toMatchArray(['gradients' => true])
+        ->and($supports['__experimentalBorder'])->toMatchArray(['color' => true, 'radius' => true, 'width' => true, 'gradient' => true])
+        ->and($supports['shadow'])->toBeTrue();
+});
