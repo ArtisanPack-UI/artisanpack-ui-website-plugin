@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Both are provisioned on boot, existing installs included. Any supports flags
 an admin added are kept, as are existing taxonomies with the same slugs.
 
+- **Color, border and shadow controls on the Terminal and Copy Command
+  blocks.** Both now offer background, text and gradient colors, borders
+  (including gradient borders), shadow presets and Effects in the inspector.
+  Needs visual-editor 1.15 or later, which applies supports to dynamic blocks.
+
+### Changed
+
+- The Terminal and Copy Command blocks render `wp-block-artisanpack-terminal`
+  and `wp-block-artisanpack-copy-command` on their root element, so block
+  style variations apply and themes can style them the same way on the front
+  end and in the editor canvas.
+
 ## [1.0.0] - 2026-10-08
 
 The plugin becomes the admin hub for ArtisanPack UI packages: syncing with the

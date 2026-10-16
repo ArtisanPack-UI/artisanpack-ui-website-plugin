@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "85653f4a0863212aa94cbc16f97db22a",
+    "content-hash": "23a9c1f2b78b431ffd52229bda8ce900",
     "packages": [],
     "packages-dev": [
         {
@@ -204,16 +204,16 @@
         },
         {
             "name": "artisanpack-ui/visual-editor",
-            "version": "1.12.1",
+            "version": "1.15.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ArtisanPack-UI/visual-editor.git",
-                "reference": "a7d85259c8ed177fc25a10aef32a7f03a727b8fa"
+                "reference": "68e694cb28826a3f6fce37979482ba431592a093"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ArtisanPack-UI/visual-editor/zipball/a7d85259c8ed177fc25a10aef32a7f03a727b8fa",
-                "reference": "a7d85259c8ed177fc25a10aef32a7f03a727b8fa",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/visual-editor/zipball/68e694cb28826a3f6fce37979482ba431592a093",
+                "reference": "68e694cb28826a3f6fce37979482ba431592a093",
                 "shasum": ""
             },
             "require": {
@@ -228,7 +228,12 @@
             "require-dev": {
                 "artisanpack-ui/ai": "^1.2",
                 "artisanpack-ui/cms-framework": "^2.11",
+                "artisanpack-ui/code-style": "^1.1",
+                "artisanpack-ui/code-style-pint": "^1.1",
                 "artisanpack-ui/icons": "^2.1",
+                "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+                "friendsofphp/php-cs-fixer": "^3.75",
+                "laravel/pint": "^1.26",
                 "livewire/livewire": "^3.6",
                 "nesbot/carbon": "^3.8.4 <3.12.0",
                 "orchestra/testbench": "^10.2",
@@ -265,7 +270,7 @@
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
-                "GPL-3.0-or-later"
+                "MIT"
             ],
             "authors": [
                 {
@@ -276,9 +281,9 @@
             "description": "A Gutenberg-powered visual editor for Laravel — post editor, site editor, and Blade/React/Vue block renderers.",
             "support": {
                 "issues": "https://github.com/ArtisanPack-UI/visual-editor/issues",
-                "source": "https://github.com/ArtisanPack-UI/visual-editor/tree/v1.12.1"
+                "source": "https://github.com/ArtisanPack-UI/visual-editor/tree/v1.15.1"
             },
-            "time": "2026-10-04T22:43:27+00:00"
+            "time": "2026-10-16T15:35:51+00:00"
         },
         {
             "name": "blade-ui-kit/blade-icons",

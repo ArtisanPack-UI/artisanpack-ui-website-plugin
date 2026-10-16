@@ -10,6 +10,12 @@ use Illuminate\Contracts\View\Factory as ViewFactory;
  * Bordered pill that displays a shell command (or any short string) alongside
  * a click-to-copy button. The rendered markup is compatible with the theme's
  * existing `.ap-clipboard` chip and its `clipboard.js` handler.
+ *
+ * Declares color, border (including gradient borders) and shadow supports;
+ * visual-editor merges them, plus Effects, into the root element on render.
+ * The root carries `wp-block-artisanpack-copy-command` so block style
+ * variations and theme defaults target the same element on the front end as
+ * the editor's block wrapper does in the canvas.
  */
 final class CopyCommandBlock
 {
@@ -64,6 +70,19 @@ final class CopyCommandBlock
                     'margin'  => ['top', 'bottom'],
                     'padding' => false,
                 ],
+                'color' => [
+                    'gradients'                     => true,
+                    '__experimentalDefaultControls' => ['background' => true, 'text' => true],
+                ],
+                '__experimentalBorder' => [
+                    'color'                         => true,
+                    'radius'                        => true,
+                    'style'                         => true,
+                    'width'                         => true,
+                    'gradient'                      => true,
+                    '__experimentalDefaultControls' => ['color' => true, 'radius' => true, 'width' => true],
+                ],
+                'shadow' => true,
             ],
         ];
     }
