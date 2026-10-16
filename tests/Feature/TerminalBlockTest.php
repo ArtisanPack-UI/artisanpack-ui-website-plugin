@@ -27,3 +27,15 @@ it('declares color, gradient border and shadow supports', function (): void {
         ->and($supports['__experimentalBorder'])->toMatchArray(['color' => true, 'radius' => true, 'width' => true, 'gradient' => true])
         ->and($supports['shadow'])->toBeTrue();
 });
+
+it('falls back to the declared default lines when the attribute is unset', function (): void {
+    $html = app(TerminalBlock::class)->render([]);
+
+    expect($html)->toContain('<span class="ap-terminal__prompt">$</span> composer require artisanpack-ui/core');
+});
+
+it('renders no lines when the lines attribute is explicitly empty', function (): void {
+    $html = app(TerminalBlock::class)->render(['lines' => '']);
+
+    expect($html)->not->toContain('ap-terminal__line--command');
+});

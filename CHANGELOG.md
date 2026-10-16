@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attribute rendered no prompt, although the attribute's declared default is
   `$`. The renderer now falls back to `$`; a prefix cleared in the editor
   (saved as an empty string) still renders none.
+- **Terminal lines default.** A Terminal saved without a `lines` attribute
+  (the editor omits attributes left at their default) rendered an empty
+  panel. The renderer now falls back to the declared default lines.
 
 ## [1.1.0] - 2026-10-16
 

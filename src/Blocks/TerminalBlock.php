@@ -123,7 +123,7 @@ TXT;
             'chromeStyle' => $chromeStyle,
             'showChrome'  => (bool) ($attrs['showChrome'] ?? true),
             'label'       => $label !== '' ? $label : $this->defaultLabel($chromeStyle),
-            'lines'       => $this->parseLines((string) ($attrs['lines'] ?? '')),
+            'lines'       => $this->parseLines((string) ($attrs['lines'] ?? self::DEFAULT_LINES)),
         ])->render();
     }
 
