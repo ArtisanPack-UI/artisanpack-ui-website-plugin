@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **FAQ Search block** (`artisanpack/faq-search`). A live search field that
+  filters the Accordion panels in its section by question and answer text
+  (case-insensitive), hides an Accordions group with no matches, and shows a
+  configurable "No questions match “%s”." message. The field has a visually
+  hidden label, and a polite live region announces how many questions are
+  shown. The filter script (`public/faq-search.js`, built to
+  `dist/assets/faq-search.js`) is enqueued for the active theme through
+  `ap.themes.frontendScripts`.
+
 ### Changed
 
 - **Copy Command prompt has its own element.** The prompt prefix (`$` by

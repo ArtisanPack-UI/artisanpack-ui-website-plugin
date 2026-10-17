@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Services\AdminWidgetManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
+use ArtisanPackUI\Site\Blocks\FaqSearchBlock;
 use ArtisanPackUI\Site\Blocks\TerminalBlock;
 use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
@@ -345,5 +346,41 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         VisualEditor::registerDynamicBlock(CopyCommandBlock::NAME, [
             'render' => $copyCommand->render(...),
         ]);
+
+        $faqSearch = $this->app->make(FaqSearchBlock::class);
+        VisualEditor::registerBlockType(FaqSearchBlock::NAME, $faqSearch->metadata());
+        VisualEditor::registerDynamicBlock(FaqSearchBlock::NAME, [
+            'render' => $faqSearch->render(...),
+        ]);
+
+        $this->registerFrontendScripts();
+    }
+
+    /**
+     * Enqueue the FAQ Search filter on the front end of whichever theme is
+     * active, through the theme script list's filter. The script is a Vite
+     * `public/` copy, so it is served from `dist/assets/` by the plugin's
+     * asset route, and is a no-op on pages without the block.
+     */
+    protected function registerFrontendScripts(): void
+    {
+        if (! function_exists('addFilter')) {
+            return;
+        }
+
+        addFilter('ap.themes.frontendScripts', static function (mixed $entries): mixed {
+            if (! is_array($entries)) {
+                return $entries;
+            }
+
+            $entries[] = [
+                'handle' => self::SLUG . '-faq-search',
+                'src'    => url('/plugins/' . self::SLUG . '/assets/faq-search.js'),
+                'defer'  => true,
+                'ver'    => self::pluginVersion(),
+            ];
+
+            return $entries;
+        });
     }
 }
