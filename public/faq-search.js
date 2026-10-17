@@ -8,7 +8,9 @@
  * out is hidden too, and the empty-state message shows the query.
  *
  * Vanilla DOM, idempotent, and re-run on `ap:rebind` like the
- * visual-editor's interactivity script.
+ * visual-editor's interactivity script. The panels are looked up on every
+ * pass, so a rebind after navigation swaps the list re-filters the new
+ * panels instead of the stale ones.
  */
 
 (function () {
@@ -35,35 +37,33 @@
     }
 
     function bind(root) {
-        if (root[BOUND]) {
+        if (typeof root[BOUND] === 'function') {
+            root[BOUND]();
+
             return;
         }
-        root[BOUND] = true;
 
         var input = root.querySelector('[data-faq-search-input]');
         var empty = root.querySelector('[data-faq-search-empty]');
         var status = root.querySelector('[data-faq-search-status]');
-        var scope = findScope(root);
 
-        if (!input || !scope) {
+        if (!input) {
             return;
         }
 
-        var panels = Array.prototype.slice.call(scope.querySelectorAll('.ap-accordion'));
-        var groups = Array.prototype.slice.call(scope.querySelectorAll('.ap-accordions'));
-        var texts = panels.map(function (panel) {
-            return panel.textContent.toLowerCase();
-        });
         var template = root.getAttribute('data-empty-text') || '';
         var announce = 0;
 
         function apply() {
+            var scope = findScope(root);
+            var panels = scope ? Array.prototype.slice.call(scope.querySelectorAll('.ap-accordion')) : [];
+            var groups = scope ? Array.prototype.slice.call(scope.querySelectorAll('.ap-accordions')) : [];
             var raw = input.value.trim();
             var query = raw.toLowerCase();
             var shown = 0;
 
-            panels.forEach(function (panel, index) {
-                var match = query === '' || texts[index].indexOf(query) !== -1;
+            panels.forEach(function (panel) {
+                var match = query === '' || panel.textContent.toLowerCase().indexOf(query) !== -1;
                 panel.hidden = !match;
                 shown += match ? 1 : 0;
             });
@@ -72,10 +72,10 @@
                 group.hidden = !group.querySelector('.ap-accordion:not([hidden])');
             });
 
-            var message = shown === 0 ? template.replace('%s', raw) : '';
+            var message = query !== '' && shown === 0 ? template.replace('%s', raw) : '';
 
             if (empty) {
-                empty.hidden = shown !== 0;
+                empty.hidden = message === '';
                 empty.textContent = message;
             }
 
@@ -90,6 +90,7 @@
         }
 
         input.addEventListener('input', apply);
+        root[BOUND] = apply;
         apply();
     }
 
