@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Copy Command prompt has its own element.** The prompt prefix (`$` by
+  default) renders as `<span class="ap-clipboard__prompt" aria-hidden="true">`
+  inside the command's `<code>`, so themes can colour it apart from the
+  command (the design system shows it in the secondary colour) and screen
+  readers announce only the command. The copied value is unchanged.
+
+### Fixed
+
+- **Copy Command prompt default.** A block saved without a `prefix`
+  attribute rendered no prompt, although the attribute's declared default is
+  `$`. The renderer now falls back to `$`; a prefix cleared in the editor
+  (saved as an empty string) still renders none.
+- **Terminal lines default.** A Terminal saved without a `lines` attribute
+  (the editor omits attributes left at their default) rendered an empty
+  panel. The renderer now falls back to the declared default lines.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

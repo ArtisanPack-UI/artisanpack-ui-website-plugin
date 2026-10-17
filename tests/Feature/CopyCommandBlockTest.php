@@ -22,6 +22,25 @@ it('names the command in the copy button and offers a status region', function (
         ->toContain('<span class="sr-only" aria-live="polite" data-clipboard-status></span>');
 });
 
+it('wraps the prompt prefix in its own span, hidden from screen readers', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons', 'prefix' => '$']);
+
+    expect($html)->toContain('<code class="ap-clipboard__value"><span class="ap-clipboard__prompt" aria-hidden="true">$</span> composer require artisanpack-ui/icons</code>');
+});
+
+it('falls back to the declared $ prefix when the attribute is unset', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons']);
+
+    expect($html)->toContain('<span class="ap-clipboard__prompt" aria-hidden="true">$</span> composer require artisanpack-ui/icons');
+});
+
+it('omits the prompt span when the prefix is blank', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => 'composer require artisanpack-ui/icons', 'prefix' => '']);
+
+    expect($html)->not->toContain('ap-clipboard__prompt')
+        ->toContain('<code class="ap-clipboard__value">composer require artisanpack-ui/icons</code>');
+});
+
 it('escapes the command', function (): void {
     $html = app(CopyCommandBlock::class)->render(['command' => '<script>alert(1)</script>']);
 
