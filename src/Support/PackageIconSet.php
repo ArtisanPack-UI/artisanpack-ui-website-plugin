@@ -87,17 +87,18 @@ final class PackageIconSet
      * Give an SVG with no root `fill` a `fill="currentColor"`, so a custom
      * icon takes its block's icon colour the way Font Awesome's (which set
      * it on each path) do, instead of painting black. Explicit fills, on
-     * the root or on shapes, are left alone.
+     * the root or on shapes, are left alone, and a self-closing root keeps
+     * its closing slash after the attribute.
      *
      * @since 1.2.0
      */
     public static function inheritColor(string $svg): string
     {
         return (string) preg_replace_callback(
-            '/<svg\b([^>]*)>/i',
+            '/<svg\b([^>]*?)(\s*\/)?>/i',
             static fn (array $match): string => 1 === preg_match('/\sfill\s*=/i', $match[1])
                 ? $match[0]
-                : '<svg' . $match[1] . ' fill="currentColor">',
+                : '<svg' . $match[1] . ' fill="currentColor"' . (isset($match[2]) ? ' /' : '') . '>',
             $svg,
             1,
         );
