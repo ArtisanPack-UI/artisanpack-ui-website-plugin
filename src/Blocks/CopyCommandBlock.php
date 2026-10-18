@@ -21,6 +21,12 @@ final class CopyCommandBlock
 {
     public const NAME = 'artisanpack/copy-command';
 
+    /**
+     * The block's default command. The editor omits an attribute equal to
+     * its default when it saves, so render falls back to it too.
+     */
+    public const DEFAULT_COMMAND = 'composer require artisanpack-ui/core';
+
     public function __construct(private readonly ViewFactory $views) {}
 
     /**
@@ -37,7 +43,7 @@ final class CopyCommandBlock
             'attributes'  => [
                 'command' => [
                     'type'      => 'string',
-                    'default'   => 'composer require artisanpack-ui/core',
+                    'default'   => self::DEFAULT_COMMAND,
                     'apControl' => [
                         'label' => 'Command',
                         'help'  => 'The exact value that will be copied to the clipboard when the button is clicked.',
@@ -93,7 +99,7 @@ final class CopyCommandBlock
     public function render(array $attrs): string
     {
         return $this->views->make('site::blocks.copy-command', [
-            'command'     => (string) ($attrs['command'] ?? ''),
+            'command'     => (string) ($attrs['command'] ?? self::DEFAULT_COMMAND),
             'prefix'      => (string) ($attrs['prefix'] ?? '$'),
             'buttonLabel' => (string) ($attrs['buttonLabel'] ?? 'Copy'),
             'copiedLabel' => (string) ($attrs['copiedLabel'] ?? 'Copied'),

@@ -60,3 +60,15 @@ it('declares color, gradient border and shadow supports', function (): void {
         ->and($supports['__experimentalBorder'])->toMatchArray(['color' => true, 'radius' => true, 'width' => true, 'gradient' => true])
         ->and($supports['shadow'])->toBeTrue();
 });
+
+it('renders the default command when the attribute is omitted, as the editor saves it', function (): void {
+    $html = app(CopyCommandBlock::class)->render([]);
+
+    expect($html)->toContain('<span class="ap-clipboard__prompt" aria-hidden="true">$</span> composer require artisanpack-ui/core');
+});
+
+it('keeps an explicitly empty command empty', function (): void {
+    $html = app(CopyCommandBlock::class)->render(['command' => '']);
+
+    expect($html)->not->toContain('composer require artisanpack-ui/core');
+});
