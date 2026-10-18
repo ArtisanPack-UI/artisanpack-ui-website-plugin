@@ -84,8 +84,29 @@ final class PackageIconSet
     }
 
     /**
+     * Give an SVG with no root `fill` a `fill="currentColor"`, so a custom
+     * icon takes its block's icon colour the way Font Awesome's (which set
+     * it on each path) do, instead of painting black. Explicit fills, on
+     * the root or on shapes, are left alone.
+     *
+     * @since 1.2.0
+     */
+    public static function inheritColor(string $svg): string
+    {
+        return (string) preg_replace_callback(
+            '/<svg\b([^>]*)>/i',
+            static fn (array $match): string => 1 === preg_match('/\sfill\s*=/i', $match[1])
+                ? $match[0]
+                : '<svg' . $match[1] . ' fill="currentColor">',
+            $svg,
+            1,
+        );
+    }
+
+    /**
      * Sanitize `$svg` and store the result as `{name}.svg`, replacing any
-     * icon of that name.
+     * icon of that name, with the root filled in `currentColor` unless it
+     * says otherwise ({@see self::inheritColor()}).
      *
      * @throws InvalidIconException When the name is invalid or nothing usable survives sanitization.
      */
@@ -113,7 +134,7 @@ final class PackageIconSet
         $path      = $this->directory . DIRECTORY_SEPARATOR . $name . '.svg';
         $temporary = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
 
-        if (false === file_put_contents($temporary, $result->sanitized, LOCK_EX) || ! rename($temporary, $path)) {
+        if (false === file_put_contents($temporary, self::inheritColor($result->sanitized), LOCK_EX) || ! rename($temporary, $path)) {
             @unlink($temporary);
 
             throw new RuntimeException(sprintf('Could not write the "%s" icon to %s.', $name, $this->directory));
