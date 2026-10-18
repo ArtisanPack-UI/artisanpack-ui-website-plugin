@@ -56,8 +56,11 @@ final class PackageBindingSource implements BlockBindingSource
             'permalink'       => self::text($model->getAttribute('permalink')) ?? $this->permalink($model),
             'version_label'   => null === ($version = self::text($model->getAttribute('version'))) ? null : 'v' . $version,
             'license'         => self::text($model->getAttribute('license')),
+            'license_label'   => null === ($license = self::text($model->getAttribute('license'))) ? null : __(':license License', ['license' => $license]),
             'downloads'       => self::compact($this->stats()->latest((int) $model->getKey())['downloads']),
             'stars'           => self::compact($this->stats()->latest((int) $model->getKey())['stars']),
+            'stars_label'     => null === ($stars = self::compact($this->stats()->latest((int) $model->getKey())['stars'])) ? null : '★ ' . $stars,
+            'terminal'        => $this->terminal($model),
             'meta'            => $this->meta($model),
             default           => null,
         };
@@ -76,8 +79,11 @@ final class PackageBindingSource implements BlockBindingSource
             ['key' => 'permalink', 'label' => __('Package page URL'), 'type' => 'url'],
             ['key' => 'version_label', 'label' => __('Version (v1.2.0)'), 'type' => 'string'],
             ['key' => 'license', 'label' => __('License'), 'type' => 'string'],
+            ['key' => 'license_label', 'label' => __('License badge (MIT License)'), 'type' => 'string'],
             ['key' => 'downloads', 'label' => __('Downloads (12k)'), 'type' => 'string'],
             ['key' => 'stars', 'label' => __('GitHub stars'), 'type' => 'string'],
+            ['key' => 'stars_label', 'label' => __('GitHub stars badge (★ 41)'), 'type' => 'string'],
+            ['key' => 'terminal', 'label' => __('Install transcript (Terminal lines)'), 'type' => 'string'],
             ['key' => 'meta', 'label' => __('Meta line (v1.2.0 · MIT · 12k installs)'), 'type' => 'string'],
         ];
     }
@@ -169,6 +175,29 @@ final class PackageBindingSource implements BlockBindingSource
         ]);
 
         return [] === $parts ? null : implode(' · ', $parts);
+    }
+
+    /**
+     * The hero terminal's install transcript, in the Terminal block's line
+     * syntax (`$ ` a command, `# ` output): the install command, the
+     * version it resolves to and a success line.
+     */
+    private function terminal(Model $package): ?string
+    {
+        $command = $this->installCommand($package);
+
+        if (null === $command) {
+            return null;
+        }
+
+        $version = self::text($package->getAttribute('version'));
+        $title   = self::text($package->getAttribute('title')) ?? '';
+
+        return implode("\n", array_filter([
+            '$ ' . $command,
+            null === $version ? null : '# ' . __('Using version ^:version', ['version' => $version]),
+            '# ' . trim(__('✓ Installed :name', ['name' => $title])),
+        ]));
     }
 
     private static function text(mixed $value): ?string
