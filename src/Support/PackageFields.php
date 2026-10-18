@@ -94,6 +94,14 @@ final class PackageFields
                 'order'       => 60,
             ],
             [
+                'key'         => 'license',
+                'name'        => 'License',
+                'type'        => 'text',
+                'column_type' => 'string',
+                'description' => 'The latest release\'s licence, e.g. MIT. Set by sync.',
+                'order'       => 65,
+            ],
+            [
                 'key'         => 'icon',
                 'name'        => 'Icon',
                 'type'        => IconPickerField::TYPE,

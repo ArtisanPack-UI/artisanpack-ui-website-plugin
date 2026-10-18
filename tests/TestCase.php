@@ -93,6 +93,7 @@ abstract class TestCase extends BaseTestCase
             $table->string('npm_name')->nullable();
             $table->string('github_repo')->nullable();
             $table->string('version')->nullable();
+            $table->string('license')->nullable();
             $table->text('icon')->nullable();
             $table->string('docs_url')->nullable();
             $table->dateTime('last_synced_at')->nullable();

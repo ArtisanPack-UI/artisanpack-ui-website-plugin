@@ -13,6 +13,7 @@ use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Services\Docs\DocsSiteClient;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use ArtisanPackUI\Site\Services\Registry\PackageRegistryClient;
+use ArtisanPackUI\Site\Services\Registry\RegistryRelease;
 use ArtisanPackUI\Site\Support\PackageFields;
 use Illuminate\Support\Carbon;
 
@@ -25,6 +26,10 @@ use Illuminate\Support\Carbon;
  * per the package's `registry`. When the registry lookup fails or lists no
  * stable release, the latest GitHub release of `github_repo` is used
  * instead, provided the GitHub App is configured.
+ *
+ * The registry's release also carries the package's `license`, which is
+ * written alongside the version. A GitHub fallback has no licence, so it
+ * leaves the stored one alone.
  *
  * The marketing package's `version` is updated when it differs. When the
  * package is linked to the docs site and the docs site's version differs,
@@ -114,23 +119,27 @@ final class PackageVersionSync
         }
 
         try {
-            $version = $this->latestVersion((string) $package->registry, $name, $repo);
+            $release = $this->latestRelease((string) $package->registry, $name, $repo);
         } catch (RegistryException|GitHubException $exception) {
             $report->fail(__(':package: :message', ['package' => $label, 'message' => $exception->getMessage()]), $package->id);
 
             return;
         }
 
-        if (null === $version) {
+        if (null === $release) {
             $report->fail(__(':package: no stable release was found.', ['package' => $label]), $package->id);
 
             return;
         }
 
-        if ($version === $package->version) {
+        $version = $release->version;
+        $license = $release->license ?? $package->license;
+
+        if ($version === $package->version && $license === $package->license) {
             $report->skipped++;
         } else {
             $package->version        = $version;
+            $package->license        = $license;
             $package->last_synced_at = Carbon::now();
             $package->save();
             $report->updated++;
@@ -140,20 +149,20 @@ final class PackageVersionSync
     }
 
     /**
-     * The registry's latest stable version, falling back to the latest
+     * The registry's latest stable release, falling back to the latest
      * GitHub release. A registry failure is only rethrown when there is
      * no fallback to try.
      */
-    private function latestVersion(string $registry, string $name, string $repo): ?string
+    private function latestRelease(string $registry, string $name, string $repo): ?RegistryRelease
     {
         $registryFailure = null;
 
         if ('' !== $name) {
             try {
-                $version = $this->registries->latestStableVersion($registry, $name);
+                $release = $this->registries->latestStableRelease($registry, $name);
 
-                if (null !== $version) {
-                    return $version;
+                if (null !== $release) {
+                    return $release;
                 }
             } catch (RegistryException $exception) {
                 $registryFailure = $exception;
@@ -168,7 +177,9 @@ final class PackageVersionSync
             return null;
         }
 
-        return $this->latestGitHubRelease($repo);
+        $version = $this->latestGitHubRelease($repo);
+
+        return null === $version ? null : new RegistryRelease($version, null);
     }
 
     /**

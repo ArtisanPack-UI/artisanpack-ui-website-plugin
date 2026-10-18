@@ -13,8 +13,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Reads a package's latest stable release, and its download and
- * compatibility stats, from Packagist or npm.
+ * Reads a package's latest stable release and its licence, and its
+ * download and compatibility stats, from Packagist or npm.
  *
  * Both registries are public, so no credentials are sent. A release counts
  * as stable when its version is plain `major.minor.patch` (an optional
@@ -53,6 +53,22 @@ class PackageRegistryClient
      * @throws RegistryException When the registry can't be reached or doesn't know the package.
      */
     public function latestStableVersion(string $registry, string $name): ?string
+    {
+        return $this->latestStableRelease($registry, $name)?->version;
+    }
+
+    /**
+     * The latest stable release with its licence, or null when the
+     * registry lists no stable release.
+     *
+     * @param  string  $registry  {@see PackageFields::REGISTRY_PACKAGIST} or {@see PackageFields::REGISTRY_NPM}.
+     * @param  string  $name      `vendor/name` for Packagist, `@scope/name` or `name` for npm.
+     *
+     * @throws RegistryException When the registry can't be reached or doesn't know the package.
+     *
+     * @since 1.2.0
+     */
+    public function latestStableRelease(string $registry, string $name): ?RegistryRelease
     {
         return match ($registry) {
             PackageFields::REGISTRY_PACKAGIST => $this->packagist($name),
@@ -115,27 +131,97 @@ class PackageRegistryClient
      * Composer v2 metadata (`/p2/{vendor}/{name}.json`) lists tagged
      * releases only; dev branches live in a separate `~dev` file.
      */
-    private function packagist(string $name): ?string
+    private function packagist(string $name): ?RegistryRelease
     {
         self::assertComposerName($name);
 
         $response = $this->get(self::PACKAGIST_URL . '/p2/' . $name . '.json', 'Packagist', $name);
         $packages = $response->json('packages');
-        $releases = is_array($packages) && is_array($packages[$name] ?? null) ? $packages[$name] : [];
+        $releases = is_array($packages) && is_array($packages[$name] ?? null) ? array_values(array_filter($packages[$name], 'is_array')) : [];
 
-        return self::newestStable(array_map(
-            static fn (mixed $release): mixed => is_array($release) ? ($release['version'] ?? null) : null,
-            $releases,
-        ));
+        if ('composer/2.0' === $response->json('minified')) {
+            $releases = self::expandMinified($releases);
+        }
+
+        $latest = self::newestStable(array_map(static fn (array $release): mixed => $release['version'] ?? null, $releases));
+
+        if (null === $latest) {
+            return null;
+        }
+
+        foreach ($releases as $release) {
+            if (self::stable($release['version'] ?? null) === $latest) {
+                return new RegistryRelease($latest, self::license($release['license'] ?? null));
+            }
+        }
+
+        return new RegistryRelease($latest, null);
+    }
+
+    /**
+     * Undo Composer v2's metadata minification: each release lists only
+     * the keys that changed since the one before it, and `__unset` marks
+     * a key the release drops.
+     *
+     * @param  list<array<string, mixed>>  $releases
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function expandMinified(array $releases): array
+    {
+        $expanded = [];
+        $previous = [];
+
+        foreach ($releases as $release) {
+            foreach ($release as $key => $value) {
+                if ('__unset' === $value) {
+                    unset($previous[$key]);
+                } else {
+                    $previous[$key] = $value;
+                }
+            }
+
+            $expanded[] = $previous;
+        }
+
+        return $expanded;
     }
 
     /**
      * The `latest` dist-tag when it is stable, otherwise the newest stable
-     * version the package has published.
+     * version the package has published, with that release's licence (or
+     * the package's, when the release manifest has none).
      */
-    private function npm(string $name): ?string
+    private function npm(string $name): ?RegistryRelease
     {
-        return self::npmLatest($this->npmDocument($name));
+        $document = $this->npmDocument($name);
+        $latest   = self::npmLatest($document);
+
+        if (null === $latest) {
+            return null;
+        }
+
+        $release = self::npmRelease($document, $latest);
+
+        return new RegistryRelease($latest, self::license($release['license'] ?? $document->json('license')));
+    }
+
+    /**
+     * A registry's licence value as display text: an SPDX string, a list
+     * of them (Packagist), or a legacy `{type}` object (old npm manifests).
+     */
+    private static function license(mixed $license): ?string
+    {
+        if (is_array($license) && isset($license['type'])) {
+            $license = $license['type'];
+        }
+
+        $names = array_values(array_filter(
+            array_map(static fn (mixed $name): string => is_string($name) ? trim($name) : '', (array) $license),
+            static fn (string $name): bool => '' !== $name,
+        ));
+
+        return [] === $names ? null : implode(' / ', $names);
     }
 
     /**
