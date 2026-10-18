@@ -28,8 +28,9 @@ use Illuminate\Support\Carbon;
  * instead, provided the GitHub App is configured.
  *
  * The registry's release also carries the package's `license`, which is
- * written alongside the version. A GitHub fallback has no licence, so it
- * leaves the stored one alone.
+ * written alongside the version, cleared when the release declares none.
+ * A GitHub fallback has no licence information, so it leaves the stored
+ * one alone.
  *
  * The marketing package's `version` is updated when it differs. When the
  * package is linked to the docs site and the docs site's version differs,
@@ -133,7 +134,7 @@ final class PackageVersionSync
         }
 
         $version = $release->version;
-        $license = $release->license ?? $package->license;
+        $license = $release->fromRegistry ? $release->license : $package->license;
 
         if ($version === $package->version && $license === $package->license) {
             $report->skipped++;
@@ -179,7 +180,7 @@ final class PackageVersionSync
 
         $version = $this->latestGitHubRelease($repo);
 
-        return null === $version ? null : new RegistryRelease($version, null);
+        return null === $version ? null : new RegistryRelease($version, null, fromRegistry: false);
     }
 
     /**

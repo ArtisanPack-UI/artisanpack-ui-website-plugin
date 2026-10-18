@@ -10,7 +10,8 @@ namespace ArtisanPackUI\Site\Services\Registry;
  *
  * `license` is the release's SPDX identifier, several joined with " / "
  * when a Packagist release lists more than one, or null when the release
- * declares none.
+ * declares none. `fromRegistry` is false for a version read from GitHub
+ * instead, which carries no licence information at all.
  *
  * @since 1.2.0
  */
@@ -19,5 +20,6 @@ final class RegistryRelease
     public function __construct(
         public readonly string $version,
         public readonly ?string $license,
+        public readonly bool $fromRegistry = true,
     ) {}
 }

@@ -31,6 +31,11 @@ final class PackageBindingSource implements BlockBindingSource
 {
     public const NAME = 'package';
 
+    /** Keystone's permalink builder, by name: the plugin's tests run without Keystone. */
+    private const PERMALINKS = 'Modules\\ContentModel\\Support\\DynamicPermalinks';
+
+    private const CONTENT_TYPE = 'ArtisanPackUI\\CMSFramework\\Modules\\ContentTypes\\Models\\ContentType';
+
     public function name(): string
     {
         return self::NAME;
@@ -48,7 +53,7 @@ final class PackageBindingSource implements BlockBindingSource
         return match ($key) {
             'install_command' => $this->installCommand($model),
             'github_url'      => $this->gitHubUrl($model),
-            'permalink'       => self::text($model->getAttribute('permalink')),
+            'permalink'       => self::text($model->getAttribute('permalink')) ?? $this->permalink($model),
             'version_label'   => null === ($version = self::text($model->getAttribute('version'))) ? null : 'v' . $version,
             'license'         => self::text($model->getAttribute('license')),
             'downloads'       => self::compact($this->stats()->latest((int) $model->getKey())['downloads']),
@@ -104,6 +109,26 @@ final class PackageBindingSource implements BlockBindingSource
     private function stats(): PackageStatsLookup
     {
         return app(PackageStatsLookup::class);
+    }
+
+    /**
+     * The package page's URL when the record carries no `permalink`: a
+     * query loop's records do, but a single-package page's own record
+     * (the plugin's {@see Package}) doesn't, so it is built the way
+     * Keystone builds content-type permalinks. Null outside Keystone, or
+     * when the type has no public route.
+     */
+    private function permalink(Model $package): ?string
+    {
+        $slug = self::text($package->getAttribute('slug'));
+
+        if (null === $slug || ! class_exists(self::PERMALINKS) || ! class_exists(self::CONTENT_TYPE)) {
+            return null;
+        }
+
+        $type = (self::CONTENT_TYPE)::query()->where('slug', PackageFields::CONTENT_TYPE)->first();
+
+        return null !== $type && (self::PERMALINKS)::isRoutable($type) ? (self::PERMALINKS)::build($type, $slug) : null;
     }
 
     private function installCommand(Model $package): ?string

@@ -205,6 +205,17 @@ describe('versions', function (): void {
             ->and(Package::query()->where('title', 'React')->value('license'))->toBe('MIT');
     });
 
+    it('clears the stored licence when the latest release declares none', function (): void {
+        Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility', 'version' => '2.4.0', 'license' => 'MIT']);
+        fakeDocs([], [
+            'repo.packagist.org/p2/artisanpack-ui/accessibility.json' => Http::response(['packages' => ['artisanpack-ui/accessibility' => [['version' => '2.4.0']]]]),
+        ]);
+
+        $this->postJson('/admin/artisanpack-ui/sync/versions')->assertJsonPath('report.updated', 1);
+
+        expect(Package::query()->value('license'))->toBeNull();
+    });
+
     it('keeps the stored licence when the version comes from GitHub', function (): void {
         IntegrationSettings::current()->update([
             'github_app_id'          => '123',
