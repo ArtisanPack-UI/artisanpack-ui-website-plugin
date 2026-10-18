@@ -38,7 +38,7 @@ final class Package extends Model
     protected $fillable = [
         'title', 'content', 'excerpt', 'status', 'published_at', 'featured_image_id',
         'docs_package_id', 'registry', 'composer_name', 'npm_name', 'github_repo',
-        'version', 'icon', 'docs_url', 'last_synced_at',
+        'version', 'license', 'icon', 'docs_url', 'last_synced_at', 'sticky',
     ];
 
     /**
@@ -59,6 +59,7 @@ final class Package extends Model
             'docs_package_id' => 'integer',
             'icon'            => 'array',
             'last_synced_at'  => 'datetime',
+            'sticky'          => 'boolean',
         ];
     }
 }

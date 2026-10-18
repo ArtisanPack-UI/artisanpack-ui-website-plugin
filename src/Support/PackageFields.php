@@ -94,6 +94,14 @@ final class PackageFields
                 'order'       => 60,
             ],
             [
+                'key'         => 'license',
+                'name'        => 'License',
+                'type'        => 'text',
+                'column_type' => 'string',
+                'description' => 'The latest release\'s licence, e.g. MIT. Set by sync.',
+                'order'       => 65,
+            ],
+            [
                 'key'         => 'icon',
                 'name'        => 'Icon',
                 'type'        => IconPickerField::TYPE,
@@ -116,6 +124,14 @@ final class PackageFields
                 'column_type' => 'dateTime',
                 'description' => 'When sync last updated this package. Set by sync.',
                 'order'       => 90,
+            ],
+            [
+                'key'         => 'sticky',
+                'name'        => 'Featured',
+                'type'        => 'checkbox',
+                'column_type' => 'boolean',
+                'description' => 'Packages sections list featured packages first, or on their own. The key matches the Query block\'s `sticky` option.',
+                'order'       => 100,
             ],
         ];
     }

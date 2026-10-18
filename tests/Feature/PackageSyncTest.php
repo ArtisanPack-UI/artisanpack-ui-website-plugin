@@ -188,6 +188,52 @@ describe('versions', function (): void {
         Http::assertSent(fn (Request $request): bool => 'https://registry.npmjs.org/@artisanpack-ui%2Freact' === $request->url());
     });
 
+    it('stores the latest release licence, reading through minified Packagist metadata', function (): void {
+        Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility', 'version' => '2.4.0']);
+        Package::query()->create(['title' => 'React', 'registry' => 'npm', 'npm_name' => '@artisanpack-ui/react']);
+        fakeDocs([], [
+            'repo.packagist.org/p2/artisanpack-ui/accessibility.json' => Http::response(['minified' => 'composer/2.0', 'packages' => ['artisanpack-ui/accessibility' => [
+                ['version' => '3.0.0-beta.1', 'license' => ['MIT']],
+                ['version' => '2.4.0'],
+            ]]]),
+            'registry.npmjs.org/*' => Http::response(['license' => 'ISC', 'dist-tags' => ['latest' => '1.2.0'], 'versions' => ['1.2.0' => ['license' => 'MIT']]]),
+        ]);
+
+        $this->postJson('/admin/artisanpack-ui/sync/versions')->assertJsonPath('report.updated', 2);
+
+        expect(Package::query()->where('title', 'A11y')->value('license'))->toBe('MIT')
+            ->and(Package::query()->where('title', 'React')->value('license'))->toBe('MIT');
+    });
+
+    it('clears the stored licence when the latest release declares none', function (): void {
+        Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility', 'version' => '2.4.0', 'license' => 'MIT']);
+        fakeDocs([], [
+            'repo.packagist.org/p2/artisanpack-ui/accessibility.json' => Http::response(['packages' => ['artisanpack-ui/accessibility' => [['version' => '2.4.0']]]]),
+        ]);
+
+        $this->postJson('/admin/artisanpack-ui/sync/versions')->assertJsonPath('report.updated', 1);
+
+        expect(Package::query()->value('license'))->toBeNull();
+    });
+
+    it('keeps the stored licence when the version comes from GitHub', function (): void {
+        IntegrationSettings::current()->update([
+            'github_app_id'          => '123',
+            'github_installation_id' => '456',
+            'github_private_key'     => testPrivateKey(),
+        ]);
+        Package::query()->create(['title' => 'A11y', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/accessibility', 'github_repo' => 'ArtisanPack-UI/accessibility', 'license' => 'MIT']);
+        fakeDocs([], [
+            'repo.packagist.org/*'                                              => Http::response([], 404),
+            'api.github.com/app/installations/*'                                => Http::response(['token' => 'ghs_1', 'expires_at' => now()->addHour()->toIso8601String()], 201),
+            'api.github.com/repos/ArtisanPack-UI/accessibility/releases/latest' => Http::response(['tag_name' => 'v2.5.0']),
+        ]);
+
+        $this->postJson('/admin/artisanpack-ui/sync/versions')->assertJsonPath('report.updated', 1);
+
+        expect(Package::query()->value('license'))->toBe('MIT');
+    });
+
     it('falls back to the newest stable npm version when latest is a pre-release', function (): void {
         Package::query()->create(['title' => 'React', 'registry' => 'npm', 'npm_name' => '@artisanpack-ui/react']);
         fakeDocs([], [

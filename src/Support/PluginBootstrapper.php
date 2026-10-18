@@ -6,11 +6,14 @@ namespace ArtisanPackUI\Site\Support;
 
 use ArtisanPackUI\Icons\Registries\IconSetRegistration;
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
+use ArtisanPackUI\Site\Bindings\PackageBindingSource;
+use ArtisanPackUI\Site\Bindings\PackageStatsLookup;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
+use ArtisanPackUI\VisualEditor\Registries\BlockBindingSourceRegistry;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Access\Gate;
@@ -44,6 +47,8 @@ final class PluginBootstrapper
     {
         $app->bind(IntegrationSettings::class, static fn (): IntegrationSettings => IntegrationSettings::current());
 
+        $app->scoped(PackageStatsLookup::class);
+
         $app->singleton(PackageIconSet::class, static fn (Application $app): PackageIconSet => new PackageIconSet(
             $app->make(SvgSanitizer::class),
             PackageIconSet::defaultDirectory(),
@@ -74,6 +79,9 @@ final class PluginBootstrapper
         Inertia::share('artisanpackUi', static fn (): array => self::sharedProps($app, $gate));
 
         self::registerIconSet($app);
+        self::registerBindingSource($app);
+        self::registerQueryPostType();
+        self::registerArchiveOrder();
         self::registerSchedule($app);
         self::registerDeletePurge();
     }
@@ -242,6 +250,60 @@ final class PluginBootstrapper
 
                 return $registry;
             }
+        });
+    }
+
+    /**
+     * Register the `package` binding source, which gives package cards
+     * their install command, GitHub link, version label, licence and
+     * stats (see {@see PackageBindingSource}).
+     */
+    private static function registerBindingSource(Application $app): void
+    {
+        if (! class_exists(BlockBindingSourceRegistry::class)) {
+            return;
+        }
+
+        $registry = $app->make(BlockBindingSourceRegistry::class);
+
+        if (! $registry->has(PackageBindingSource::NAME)) {
+            $registry->register(new PackageBindingSource);
+        }
+    }
+
+    /**
+     * Offer Packages in the Query block's post type picker. The server
+     * already resolves a `package` query; this only lists it.
+     */
+    private static function registerQueryPostType(): void
+    {
+        if (! function_exists('addFilter')) {
+            return;
+        }
+
+        addFilter('ap.visualEditor.query.postTypes', static function (mixed $options): mixed {
+            if (! is_array($options)) {
+                return $options;
+            }
+
+            $options[] = ['value' => PackageFields::CONTENT_TYPE, 'label' => __('Packages')];
+
+            return $options;
+        });
+    }
+
+    /**
+     * List the packages archive by title, A to Z, instead of Keystone's
+     * newest-first default. Other types keep their order.
+     */
+    private static function registerArchiveOrder(): void
+    {
+        if (! function_exists('addFilter')) {
+            return;
+        }
+
+        addFilter('keystone.public.contentType.archive.order', static function (mixed $order, mixed $type = null): mixed {
+            return is_object($type) && PackageFields::CONTENT_TYPE === ($type->slug ?? null) ? [['title', 'asc']] : $order;
         });
     }
 }
