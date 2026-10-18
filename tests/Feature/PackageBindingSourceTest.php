@@ -51,6 +51,23 @@ it('reads the version, licence and latest stats into the meta line', function ()
         ->and(bindPackage($package, 'meta'))->toBe('v1.3.1 · MIT · 12k installs');
 });
 
+it('labels the licence and stars badges and writes the install transcript', function (): void {
+    $package = Package::query()->create(['title' => 'Core', 'registry' => 'packagist', 'composer_name' => 'artisanpack-ui/core', 'version' => '1.2.0', 'license' => 'MIT']);
+    PackageStatSnapshot::query()->create(['package_id' => $package->id, 'date' => '2026-10-16', 'downloads_total' => 10, 'stars' => 41]);
+
+    expect(bindPackage($package, 'license_label'))->toBe('MIT License')
+        ->and(bindPackage($package, 'stars_label'))->toBe('★ 41')
+        ->and(bindPackage($package, 'terminal'))->toBe("$ composer require artisanpack-ui/core\n# Using version ^1.2.0\n# ✓ Installed Core");
+});
+
+it('leaves out the badges and transcript a package cannot fill', function (): void {
+    $package = Package::query()->create(['title' => 'Blank', 'registry' => 'packagist']);
+
+    expect(bindPackage($package, 'license_label'))->toBeNull()
+        ->and(bindPackage($package, 'stars_label'))->toBeNull()
+        ->and(bindPackage($package, 'terminal'))->toBeNull();
+});
+
 it('leaves out what a package does not have', function (): void {
     $package = Package::query()->create(['title' => 'Core', 'version' => '1.0.0']);
 
