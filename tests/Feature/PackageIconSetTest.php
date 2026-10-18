@@ -44,6 +44,22 @@ it('stores only the sanitized markup', function (): void {
         ->not->toContain('onload');
 });
 
+it('fills a custom icon in its block colour unless it sets its own fill', function (): void {
+    $iconSet = useTemporaryIconSet();
+
+    $iconSet->write('plain', testSvg());
+    $iconSet->write('own-fill', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" d="M1 1h2"/></svg>');
+
+    expect((string) file_get_contents($iconSet->directory() . '/plain.svg'))->toMatch('/<svg[^>]*fill="currentColor"/')
+        ->and((string) file_get_contents($iconSet->directory() . '/own-fill.svg'))->toMatch('/<svg[^>]*fill="none"/')
+        ->not->toContain('currentColor"><path stroke');
+});
+
+it('keeps a self-closing svg root well formed when it adds the fill', function (): void {
+    expect(PackageIconSet::inheritColor('<svg xmlns="http://www.w3.org/2000/svg"/>'))->toBe('<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" />')
+        ->and(PackageIconSet::inheritColor('<svg viewBox="0 0 24 24"><path d="M1 1"/></svg>'))->toBe('<svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 1"/></svg>');
+});
+
 it('rejects markup that does not survive sanitization', function (string $markup): void {
     $iconSet = useTemporaryIconSet();
 
