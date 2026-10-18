@@ -293,8 +293,8 @@ final class PluginBootstrapper
     }
 
     /**
-     * List the packages archive by title, A to Z, instead of Keystone's
-     * newest-first default. Other types keep their order.
+     * List the packages archive by title, A to Z, nine to a page, instead
+     * of Keystone's newest-first ten. Other types keep their defaults.
      */
     private static function registerArchiveOrder(): void
     {
@@ -304,6 +304,11 @@ final class PluginBootstrapper
 
         addFilter('keystone.public.contentType.archive.order', static function (mixed $order, mixed $type = null): mixed {
             return is_object($type) && PackageFields::CONTENT_TYPE === ($type->slug ?? null) ? [['title', 'asc']] : $order;
+        });
+
+        // Nine per page: three full rows of the theme's 3-up package grid.
+        addFilter('keystone.public.contentType.archive.perPage', static function (mixed $perPage, mixed $type = null): mixed {
+            return is_object($type) && PackageFields::CONTENT_TYPE === ($type->slug ?? null) ? 9 : $perPage;
         });
     }
 }

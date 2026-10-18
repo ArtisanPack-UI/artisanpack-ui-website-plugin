@@ -109,3 +109,8 @@ it('lists the packages archive by title and leaves other types alone', function 
     expect(applyFilters('keystone.public.contentType.archive.order', $default, (object) ['slug' => 'package']))->toBe([['title', 'asc']])
         ->and(applyFilters('keystone.public.contentType.archive.order', $default, (object) ['slug' => 'case-study']))->toBe($default);
 });
+
+it('pages the packages archive nine at a time and leaves other types alone', function (): void {
+    expect(applyFilters('keystone.public.contentType.archive.perPage', 10, (object) ['slug' => 'package']))->toBe(9)
+        ->and(applyFilters('keystone.public.contentType.archive.perPage', 10, (object) ['slug' => 'case-study']))->toBe(10);
+});
