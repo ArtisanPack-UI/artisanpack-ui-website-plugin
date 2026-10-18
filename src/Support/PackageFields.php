@@ -125,6 +125,14 @@ final class PackageFields
                 'description' => 'When sync last updated this package. Set by sync.',
                 'order'       => 90,
             ],
+            [
+                'key'         => 'sticky',
+                'name'        => 'Featured',
+                'type'        => 'checkbox',
+                'column_type' => 'boolean',
+                'description' => 'Packages sections list featured packages first, or on their own. The key matches the Query block\'s `sticky` option.',
+                'order'       => 100,
+            ],
         ];
     }
 

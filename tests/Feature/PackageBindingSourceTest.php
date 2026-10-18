@@ -85,3 +85,10 @@ it('lists Packages in the query block post type picker', function (): void {
 
     expect($options)->toContain(['value' => 'package', 'label' => 'Packages']);
 });
+
+it('lists the packages archive by title and leaves other types alone', function (): void {
+    $default = [['published_at', 'desc']];
+
+    expect(applyFilters('keystone.public.contentType.archive.order', $default, (object) ['slug' => 'package']))->toBe([['title', 'asc']])
+        ->and(applyFilters('keystone.public.contentType.archive.order', $default, (object) ['slug' => 'case-study']))->toBe($default);
+});

@@ -81,6 +81,7 @@ final class PluginBootstrapper
         self::registerIconSet($app);
         self::registerBindingSource($app);
         self::registerQueryPostType();
+        self::registerArchiveOrder();
         self::registerSchedule($app);
         self::registerDeletePurge();
     }
@@ -288,6 +289,21 @@ final class PluginBootstrapper
             $options[] = ['value' => PackageFields::CONTENT_TYPE, 'label' => __('Packages')];
 
             return $options;
+        });
+    }
+
+    /**
+     * List the packages archive by title, A to Z, instead of Keystone's
+     * newest-first default. Other types keep their order.
+     */
+    private static function registerArchiveOrder(): void
+    {
+        if (! function_exists('addFilter')) {
+            return;
+        }
+
+        addFilter('keystone.public.contentType.archive.order', static function (mixed $order, mixed $type = null): mixed {
+            return is_object($type) && PackageFields::CONTENT_TYPE === ($type->slug ?? null) ? [['title', 'asc']] : $order;
         });
     }
 }

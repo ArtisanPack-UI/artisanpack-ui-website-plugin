@@ -7,7 +7,7 @@ use ArtisanPackUI\Site\Support\PackageFields;
 it('defines the fields sync, stats and the boards rely on', function (): void {
     expect(PackageFields::keys())->toBe([
         'docs_package_id', 'registry', 'composer_name', 'npm_name', 'github_repo',
-        'version', 'license', 'icon', 'docs_url', 'last_synced_at',
+        'version', 'license', 'icon', 'docs_url', 'last_synced_at', 'sticky',
     ]);
 });
 
@@ -34,7 +34,7 @@ it('avoids the keys Keystone reserves for its own columns', function (): void {
 
 it('lists only the fields still to register', function (): void {
     expect(array_column(PackageFields::missing(['registry', 'icon']), 'key'))->not->toContain('registry', 'icon')
-        ->toHaveCount(8)
+        ->toHaveCount(9)
         ->and(PackageFields::missing(PackageFields::keys()))->toBe([]);
 });
 
