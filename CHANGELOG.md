@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
 ### Added
 
+- **`package` binding source.** Blocks inside a package query loop, or on a
+  single package page, can bind to `install_command`, `github_url`,
+  `permalink`, `version_label`, `license`, `downloads`, `stars`,
+  `stars_label` and `meta` (e.g. a Copy Command's command, a Button's URL, a
+  paragraph's licence badge). `github_url` is only built from a validated
+  `owner/repo`; every other value is plain text.
+- **Licence and Featured fields on packages.** `license` is filled from the
+  Packagist / npm registry on version sync (an unlicensed release clears it),
+  and a **Featured** checkbox (`sticky`) lets a query loop list the featured
+  package first.
+- **Packages in the Query block's post-type picker.**
+- **Package page bindings and an install transcript** for the single-package
+  page pattern.
 - **FAQ Search block** (`artisanpack/faq-search`). A live search field that
   filters the Accordion panels in its section by question and answer text
   (case-insensitive), hides an Accordions group with no matches, and shows a
@@ -20,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Packages archive is title-ordered (A–Z) and lists nine per page**
+  (three full rows of the three-column grid), through Keystone's archive
+  order and `keystone.public.contentType.archive.perPage` filters.
 - **Copy Command prompt has its own element.** The prompt prefix (`$` by
   default) renders as `<span class="ap-clipboard__prompt" aria-hidden="true">`
   inside the command's `<code>`, so themes can colour it apart from the
@@ -28,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Custom `apui` icons take the block's colour.** Synced package icons are
+  filled with `currentColor`, so an icon tile's colour applies (Core's atom was
+  black on its tile). A self-closing `<svg/>` root stays well formed.
+- **Copy Command renders its default command** when the block omits the
+  attribute (the editor doesn't save a default), instead of an empty chip
+  ([#43](https://github.com/ArtisanPack-UI/artisanpack-ui-website-plugin/issues/43)).
 - **Copy Command prompt default.** A block saved without a `prefix`
   attribute rendered no prompt, although the attribute's declared default is
   `$`. The renderer now falls back to `$`; a prefix cleared in the editor
