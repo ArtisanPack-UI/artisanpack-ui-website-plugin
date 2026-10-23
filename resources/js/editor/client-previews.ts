@@ -22,6 +22,8 @@
  * Keep the markup in step with `resources/views/blocks/copy-command.blade.php`
  * and `resources/views/blocks/terminal.blade.php` — the theme styles both by
  * the same classes.
+ *
+ * @since 1.2.1
  */
 
 /** Namespace the filter is registered under, so a remount doesn't add it twice. */

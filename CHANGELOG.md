@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-23
+
+### Changed
+
+- **Copy Command and Terminal preview client side in the editor.** The visual
+  editor used to preview each instance with its own server render request,
+  so a pattern with many copy commands (`getting-started-full` has 13) sent
+  them all at once and could time out. Both blocks now draw from their
+  attributes in the editor, with the same markup and classes as the front
+  end, and sidebar edits repaint without a request. The front-end render is
+  unchanged, and FAQ Search still previews from the server (#46).
+
 ## [1.2.0] - 2026-10-18
 
 ### Added
