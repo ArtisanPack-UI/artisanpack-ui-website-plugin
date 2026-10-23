@@ -8,7 +8,8 @@
  *
  * Contributes the Docs, Stats and Issues tabs, the sync status panel and
  * the icon picker to the `package` edit screen, the "Sync from docs"
- * button to the Packages list, and the dashboard widgets' bodies.
+ * button to the Packages list, the dashboard widgets' bodies, and the
+ * client-side editor previews for the copy-command and terminal blocks.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
  * `contentEdit` Inertia prop, so `AdminEditSlot` seeds every slot with `[]`
@@ -23,10 +24,11 @@
  * singleton, so the references render into the host's React runtime.
  */
 
-import { addFilter, doAction } from '@artisanpack-ui/hooks-js';
+import { addAction, addFilter, doAction } from '@artisanpack-ui/hooks-js';
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 
 import { SyncFromDocsButton } from './components/SyncFromDocsButton';
+import { registerClientPreviews } from './editor/client-previews';
 import { NoAccess, useAbilities } from './components/ui';
 import { IconPickerField, type EditForm } from './fields/IconPickerField';
 import { RegistryField } from './fields/RegistryField';
@@ -234,5 +236,15 @@ const DASHBOARD_WIDGETS: Record<string, () => Promise<{ default: ComponentType<W
 for (const [key, load] of Object.entries(DASHBOARD_WIDGETS)) {
     doAction('keystone.admin.dashboard.widget.registerFederated', key, lazy(load));
 }
+
+/**
+ * Preview the copy-command and terminal blocks client side instead of one
+ * server render per instance (#46). The visual editor's globals only exist
+ * once its bundle has loaded, so the filter goes on just before Keystone
+ * boots it; the direct call covers an editor that was already loaded when
+ * this module ran.
+ */
+addAction('keystone.admin.visualEditor.beforeBoot', registerClientPreviews);
+registerClientPreviews();
 
 export {};
