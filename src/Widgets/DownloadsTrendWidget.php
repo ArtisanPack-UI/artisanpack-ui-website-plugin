@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Widgets;
 
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
 use Modules\Users\Models\User;
 
@@ -16,7 +17,7 @@ use Modules\Users\Models\User;
  */
 class DownloadsTrendWidget extends StatsWidget
 {
-    public const DEFAULT_RANGE = 30;
+    public const DEFAULT_RANGE = DashboardWidgetData::TREND_DEFAULT_RANGE;
 
     /**
      * @return array{title: string, description: string, capability: string, source: string, default_options: array{package: string, range: string}}
@@ -41,10 +42,7 @@ class DownloadsTrendWidget extends StatsWidget
      */
     public static function getData(User $user, array $options): array
     {
-        return self::stats()->downloadsTrend(
-            self::packageId($options),
-            self::intOption($options, 'range', self::DEFAULT_RANGE, 1, 365),
-        );
+        return DashboardWidgetData::deferred(DashboardWidgetData::DOWNLOADS_TREND, $options);
     }
 
     /**

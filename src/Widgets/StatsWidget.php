@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Widgets;
 
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
 use ArtisanPackUI\Site\Support\Permissions;
 use Modules\SiteEditor\Widgets\Contracts\KeystoneAdminWidgetInterface;
@@ -12,10 +13,11 @@ use Modules\SiteEditor\Widgets\Contracts\KeystoneAdminWidgetInterface;
 /**
  * Base for the dashboard stats widgets (roadmap 4.3).
  *
- * Each widget is a thin adapter over {@see DashboardStats}, which holds the
- * payloads so they stay testable under bare Testbench: these classes
- * implement a host interface (and take the host `User`), so they only
- * autoload inside a running Keystone install. The provider registers them
+ * Each widget's `getData()` returns only the URL of its payload, which the
+ * bundle fetches once the dashboard has rendered. The payloads themselves
+ * are built by {@see DashboardWidgetData}, so they stay testable under bare
+ * Testbench: these classes implement a host interface (and take the host
+ * `User`), so they only autoload inside a running Keystone install. The provider registers them
  * behind an `interface_exists()` guard
  * ({@see ArtisanPackUIServiceProvider::registerDashboardWidgets()}).
  *
@@ -37,36 +39,6 @@ abstract class StatsWidget implements KeystoneAdminWidgetInterface
             'capability' => Permissions::STATS_VIEW,
             'source'     => ArtisanPackUIServiceProvider::SLUG,
         ];
-    }
-
-    protected static function stats(): DashboardStats
-    {
-        return app(DashboardStats::class);
-    }
-
-    /**
-     * The package an instance's `package` option names, or null for every
-     * package.
-     *
-     * @param  array<string, mixed>  $options
-     */
-    protected static function packageId(array $options): ?int
-    {
-        $value = $options['package'] ?? null;
-
-        return is_numeric($value) && (int) $value > 0 ? (int) $value : null;
-    }
-
-    /**
-     * An integer option, clamped to `[$min, $max]`.
-     *
-     * @param  array<string, mixed>  $options
-     */
-    protected static function intOption(array $options, string $name, int $default, int $min, int $max): int
-    {
-        $value = $options[$name] ?? null;
-
-        return is_numeric($value) ? max($min, min($max, (int) $value)) : $default;
     }
 
     /**

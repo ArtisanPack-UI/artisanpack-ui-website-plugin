@@ -37,6 +37,7 @@ export default function BoardWidget({ data }: WidgetProps<BoardWidgetData>) {
                     <span className="text-base-content">{formatNumber(data.total)}</span>
                 </li>
             </ul>
+            {data.warning !== null && <p className="text-xs text-warning">{data.warning}</p>}
             <a href={data.boardUrl} className="link link-primary text-xs">
                 Open the board
             </a>

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Widgets;
 
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
-use ArtisanPackUI\Site\Services\Board\BoardSummary;
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
 use ArtisanPackUI\Site\Support\Permissions;
 use Modules\SiteEditor\Widgets\Contracts\KeystoneAdminWidgetInterface;
@@ -16,8 +16,9 @@ use Modules\Users\Models\User;
  * for every package or the ones an instance picks, linking to the global
  * board with the same filter applied (roadmap 5.5).
  *
- * A thin adapter over {@see BoardSummary}, registered like the stats
- * widgets ({@see StatsWidget}) but gated on {@see Permissions::ISSUES_MANAGE},
+ * Its payload, from {@see \ArtisanPackUI\Site\Services\Board\BoardSummary},
+ * is fetched once the dashboard has rendered, like the stats widgets'
+ * ({@see StatsWidget}), but it is gated on {@see Permissions::ISSUES_MANAGE},
  * the permission the board it links to needs.
  *
  * @since 1.0.0
@@ -45,7 +46,7 @@ class BoardWidget implements KeystoneAdminWidgetInterface
      */
     public static function getData(User $user, array $options): array
     {
-        return app(BoardSummary::class)->summarize(self::packageIds($options));
+        return DashboardWidgetData::deferred(DashboardWidgetData::BOARD, $options);
     }
 
     /**
@@ -77,20 +78,5 @@ class BoardWidget implements KeystoneAdminWidgetInterface
                 ],
             ],
         ];
-    }
-
-    /**
-     * The package ids an instance's `packages` option names.
-     *
-     * @param  array<string, mixed>  $options
-     *
-     * @return list<int>
-     */
-    public static function packageIds(array $options): array
-    {
-        $values = is_array($options['packages'] ?? null) ? $options['packages'] : [];
-        $ids    = array_map(static fn (mixed $value): int => is_numeric($value) ? (int) $value : 0, $values);
-
-        return array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Widgets;
 
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
 use Modules\Users\Models\User;
 
@@ -15,11 +16,11 @@ use Modules\Users\Models\User;
  */
 class TopPackagesWidget extends StatsWidget
 {
-    public const DEFAULT_WINDOW = 30;
+    public const DEFAULT_WINDOW = DashboardWidgetData::TOP_DEFAULT_WINDOW;
 
-    public const DEFAULT_LIMIT = 5;
+    public const DEFAULT_LIMIT = DashboardWidgetData::TOP_DEFAULT_LIMIT;
 
-    public const MAX_LIMIT = 20;
+    public const MAX_LIMIT = DashboardWidgetData::TOP_MAX_LIMIT;
 
     /**
      * @return array{title: string, description: string, capability: string, source: string, default_options: array{rank_by: string, window: string, limit: int}}
@@ -45,11 +46,7 @@ class TopPackagesWidget extends StatsWidget
      */
     public static function getData(User $user, array $options): array
     {
-        return self::stats()->topPackages(
-            is_string($options['rank_by'] ?? null) ? $options['rank_by'] : DashboardStats::RANK_BY_DOWNLOADS,
-            self::intOption($options, 'window', self::DEFAULT_WINDOW, 1, 365),
-            self::intOption($options, 'limit', self::DEFAULT_LIMIT, 1, self::MAX_LIMIT),
-        );
+        return DashboardWidgetData::deferred(DashboardWidgetData::TOP_PACKAGES, $options);
     }
 
     /**

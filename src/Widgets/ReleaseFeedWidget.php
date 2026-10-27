@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Widgets;
 
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use Modules\Users\Models\User;
 
 /**
@@ -14,9 +15,9 @@ use Modules\Users\Models\User;
  */
 class ReleaseFeedWidget extends StatsWidget
 {
-    public const DEFAULT_LIMIT = 8;
+    public const DEFAULT_LIMIT = DashboardWidgetData::RELEASES_DEFAULT_LIMIT;
 
-    public const MAX_LIMIT = 30;
+    public const MAX_LIMIT = DashboardWidgetData::RELEASES_MAX_LIMIT;
 
     /**
      * @return array{title: string, description: string, capability: string, source: string, default_options: array{limit: int}}
@@ -38,7 +39,7 @@ class ReleaseFeedWidget extends StatsWidget
      */
     public static function getData(User $user, array $options): array
     {
-        return self::stats()->releaseFeed(self::intOption($options, 'limit', self::DEFAULT_LIMIT, 1, self::MAX_LIMIT));
+        return DashboardWidgetData::deferred(DashboardWidgetData::RELEASE_FEED, $options);
     }
 
     /**

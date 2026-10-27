@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dashboard widgets load their data after the dashboard renders.** The
+  host builds every widget's payload while it renders the dashboard, so a
+  dashboard full of the plugin's widgets could run past the server's
+  timeout, the board widget's GitHub read above all. Each widget now hands
+  the dashboard only the URL of its payload, shows a skeleton in its place,
+  and fetches the payload from the new `artisanpack-ui.widgets.stats` and
+  `artisanpack-ui.widgets.board` endpoints, behind the same permissions as
+  before. A widget whose payload fails to load says why and offers to try
+  again.
+- **The board widget never waits on GitHub.** Reading the org project can
+  take about 30 seconds, so the widget now serves the last counts it has,
+  however old, and reads the project again once the response has been sent
+  (when the counts are more than a minute old, and one read at a time). A
+  failed read keeps the last counts for up to a week, with a note that
+  they may be out of date, and then shows the error. Before the very first
+  read finishes, the widget keeps its skeleton up and checks back every
+  few seconds.
+
 ## [1.2.1] - 2026-10-23
 
 ### Changed
