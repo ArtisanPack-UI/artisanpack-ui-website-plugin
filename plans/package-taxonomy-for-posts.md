@@ -69,23 +69,24 @@ and readers have no way to browse every post about one package.
    the Query block's **Filters** panel, picks Taxonomy "Packages", Term
    "Accessibility", and saves. The page lists the newest posts tagged
    Accessibility.
-5. The pattern's "All updates" link goes to the term archive (for example
-   `/blog/package/accessibility`, with the route shape decided in the Keystone
-   issue), which lists every post with that term.
+5. The pattern's "All updates" link goes to the term archive at
+   `/blog/package/accessibility` (`/blog/{taxonomy}/{term}`), which lists every
+   post with that term.
 6. A single post shows "Packages: Accessibility, Forms" through the Post Terms
    block's Packages variation, and each name links to its term archive.
 
 ### Edge cases
 
 - **Package renamed:** the term's name and slug follow it. The plugin keeps the
-  term id per package rather than matching on slug, so assignments survive. The
-  old archive URL 404s (acceptable for v1, see Open Questions).
+  term id per package rather than matching on slug, so assignments survive.
+  Keystone adds a 301 from the old archive URL to the new one, as it already
+  does for post and page slug changes.
 - **Package deleted:** the term is deleted and its assignments cascade
   (`keystone_dynamic_content_term_assignments.term_id` cascades on delete).
   Query blocks filtering on it show their empty state.
-- **Draft package:** the term exists, so posts can be tagged ahead of launch,
-  but the term archive and Post Terms only link to published packages' terms
-  (decide in the plugin issue: hide or show unlinked).
+- **Draft package:** the term exists and behaves like any other term, so posts
+  can be tagged ahead of launch. Its archive and the post's Packages list are
+  not hidden while the package is a draft.
 - **Post deleted:** its assignments are removed, as the ContentModel delete path
   already does for dynamic records.
 - **Slug collision:** the `package` taxonomy slug is taken by another type. The
@@ -107,8 +108,11 @@ and readers have no way to browse every post about one package.
 - [ ] The Query block's Filters panel lets an author pick a taxonomy available
       to the selected post type, plus one or more of its terms.
 - [ ] Category/tag `taxQuery` behavior is unchanged.
-- [ ] Each published post term has a public archive that uses the theme's
-      template hierarchy and falls back to the blog archive template.
+- [ ] Each post term has a public archive at `/blog/{taxonomy}/{term}` that
+      uses the theme's template hierarchy and falls back to the blog archive
+      template.
+- [ ] Changing a term's slug (in the admin or through the plugin's sync) adds a
+      301 from the old archive URL to the new one.
 - [ ] Post Terms offers a Packages variation and renders the post's package
       terms linked to their archives.
 - [ ] The plugin creates one `package` term per Package record, and keeps it
@@ -163,10 +167,15 @@ Keystone, then the plugin.
 - Terms for the editor: extend the `ap.visualEditor.terms` and
   `.terms.allUrl` filters (`ContentModelServiceProvider`) and the taxonomy
   registry payload to cover taxonomies bound to `post`.
-- Public archive: a term archive route under the blog base, beside the
-  existing category and tag archives (`BlogController::renderTermArchive()`),
-  with a `taxonomy-{slug}` → `archive-post` → `index` template hierarchy and
-  the same `keystone.public.blog.term.*` filters.
+- Public archive: `/blog/{taxonomy}/{term}`, beside the existing category and
+  tag archives (`BlogController::renderTermArchive()`), with a
+  `taxonomy-{slug}` → `archive-post` → `index` template hierarchy and the same
+  `keystone.public.blog.term.*` filters.
+- Redirects: when a post term's slug changes, insert a 301 from the old archive
+  path to the new one and flatten chains, following
+  `Modules/Seo/app/Observers/SlugChangeRedirectObserver.php`. Hook it at the
+  term-update layer rather than in the admin controller, so the plugin's sync
+  triggers it too.
 - Post delete: remove that post's assignments.
 
 ### Plugin (this repo)
@@ -205,13 +214,3 @@ Keystone, then the plugin.
 
 - Keystone release with posts taxonomy support, which needs cms-framework and
   visual-editor releases that include the changes above.
-
-## Open Questions
-
-- Archive route shape: `/blog/{taxonomy}/{term}` or `/{taxonomy}/{term}`? The
-  Keystone issue should decide it, keeping in mind that category and tag
-  archives already use their own bases.
-- Should a renamed package redirect its old term-archive URL? (Not in v1
-  unless the redirect manager makes it trivial.)
-- Should terms for draft packages be hidden from Post Terms and their archive
-  until the package is published?
