@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Widgets;
 
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use Modules\Users\Models\User;
 
 /**
@@ -33,7 +34,7 @@ class GitHubOverviewWidget extends StatsWidget
      */
     public static function getData(User $user, array $options): array
     {
-        return self::stats()->gitHubOverview();
+        return DashboardWidgetData::deferred(DashboardWidgetData::GITHUB_OVERVIEW, $options);
     }
 
     /**

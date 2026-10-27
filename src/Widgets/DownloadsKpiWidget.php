@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site\Widgets;
 
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
 use Modules\Users\Models\User;
 
@@ -15,7 +16,7 @@ use Modules\Users\Models\User;
  */
 class DownloadsKpiWidget extends StatsWidget
 {
-    public const DEFAULT_METRIC = 'total';
+    public const DEFAULT_METRIC = DashboardWidgetData::KPI_DEFAULT_METRIC;
 
     /**
      * @return array{title: string, description: string, capability: string, source: string, default_options: array{metric: string, package: string}}
@@ -40,9 +41,7 @@ class DownloadsKpiWidget extends StatsWidget
      */
     public static function getData(User $user, array $options): array
     {
-        $metric = is_string($options['metric'] ?? null) ? $options['metric'] : self::DEFAULT_METRIC;
-
-        return self::stats()->downloads($metric, self::packageId($options));
+        return DashboardWidgetData::deferred(DashboardWidgetData::DOWNLOADS_KPI, $options);
     }
 
     /**

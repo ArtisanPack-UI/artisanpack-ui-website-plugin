@@ -398,4 +398,11 @@ export interface BoardWidgetData {
     boardUrl: string;
     /** Why the project couldn't be read, e.g. GitHub isn't set up. */
     error: string | null;
+    /** Why the counts shown may be out of date: the last read failed. */
+    warning: string | null;
+    /**
+     * True before the first read of the project finishes. The body never
+     * sees it: `DeferredWidget` keeps the skeleton up and asks again.
+     */
+    pending: boolean;
 }

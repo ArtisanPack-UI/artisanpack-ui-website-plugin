@@ -32,6 +32,7 @@ import { registerClientPreviews } from './editor/client-previews';
 import { NoAccess, useAbilities } from './components/ui';
 import { IconPickerField, type EditForm } from './fields/IconPickerField';
 import { RegistryField } from './fields/RegistryField';
+import { deferredWidget, type SkeletonShape } from './widgets/DeferredWidget';
 import type { Abilities, PackageTabProps, WidgetProps } from './lib/types';
 
 /** The content type slug the plugin's seeder registers for packages. */
@@ -216,25 +217,31 @@ addFilter('keystone.admin.topbar.right', (node: unknown) => (
 /**
  * The dashboard stats and board widgets' bodies (roadmap 4.3 and 5.5),
  * keyed by each PHP widget's `extendedInfo()['component']` (see
- * `src/Widgets`). Registered
+ * `src/Widgets`), with the skeleton each shows while its payload loads.
+ * Registered
  * through the host's `registerFederated` action rather than its widget
  * registry module, which isn't a shared federation singleton: the action
  * writes into the registry the dashboard grid actually reads. The host
- * wraps each in an error boundary and a Suspense boundary, so the lazy
- * bodies load on first render. Capability gating is server side: the
- * dashboard only hydrates widgets the user's permissions allow.
+ * wraps each in an error boundary and a Suspense boundary. Each body
+ * fetches its own payload once the dashboard has rendered (see
+ * `./widgets/DeferredWidget`). Capability gating is server side: the
+ * dashboard only hydrates widgets the user's permissions allow, and each
+ * payload endpoint checks the same permission.
  */
-const DASHBOARD_WIDGETS: Record<string, () => Promise<{ default: ComponentType<WidgetProps<never>> }>> = {
-    ArtisanPackUIDownloadsKpiWidget: () => import('./widgets/DownloadsKpiWidget'),
-    ArtisanPackUIDownloadsTrendWidget: () => import('./widgets/DownloadsTrendWidget'),
-    ArtisanPackUIGitHubOverviewWidget: () => import('./widgets/GitHubOverviewWidget'),
-    ArtisanPackUITopPackagesWidget: () => import('./widgets/TopPackagesWidget'),
-    ArtisanPackUIReleaseFeedWidget: () => import('./widgets/ReleaseFeedWidget'),
-    ArtisanPackUIBoardWidget: () => import('./widgets/BoardWidget'),
+const DASHBOARD_WIDGETS: Record<
+    string,
+    { load: () => Promise<{ default: ComponentType<WidgetProps<never>> }>; skeleton: SkeletonShape }
+> = {
+    ArtisanPackUIDownloadsKpiWidget: { load: () => import('./widgets/DownloadsKpiWidget'), skeleton: 'kpi' },
+    ArtisanPackUIDownloadsTrendWidget: { load: () => import('./widgets/DownloadsTrendWidget'), skeleton: 'chart' },
+    ArtisanPackUIGitHubOverviewWidget: { load: () => import('./widgets/GitHubOverviewWidget'), skeleton: 'list' },
+    ArtisanPackUITopPackagesWidget: { load: () => import('./widgets/TopPackagesWidget'), skeleton: 'list' },
+    ArtisanPackUIReleaseFeedWidget: { load: () => import('./widgets/ReleaseFeedWidget'), skeleton: 'list' },
+    ArtisanPackUIBoardWidget: { load: () => import('./widgets/BoardWidget'), skeleton: 'list' },
 };
 
-for (const [key, load] of Object.entries(DASHBOARD_WIDGETS)) {
-    doAction('keystone.admin.dashboard.widget.registerFederated', key, lazy(load));
+for (const [key, { load, skeleton }] of Object.entries(DASHBOARD_WIDGETS)) {
+    doAction('keystone.admin.dashboard.widget.registerFederated', key, deferredWidget(load, skeleton));
 }
 
 /**

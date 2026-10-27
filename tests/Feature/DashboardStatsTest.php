@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageStatSnapshot;
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Services\Stats\DashboardStats;
+use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Support\Carbon;
 
 /**
  * The dashboard stats widgets' payloads (roadmap 4.3), read from the
- * daily snapshots. The widget classes themselves implement a host
- * interface and are checked in a running install.
+ * daily snapshots, and the endpoint each widget fetches its payload from
+ * once the dashboard has rendered. The widget classes themselves
+ * implement a host interface and are checked in a running install.
  */
 
 beforeEach(function (): void {
@@ -200,4 +203,51 @@ it('lists each package\'s latest release, newest first, then synced versions', f
         ['id' => $a->id, 'title' => 'Accessibility', 'version' => '2.4.0', 'releasedAt' => '2026-09-01T10:00:00+00:00'],
         ['id' => $c->id, 'title' => 'Unreleased', 'version' => '0.1.0', 'releasedAt' => null],
     ])->and($this->stats->releaseFeed(1)['releases'])->toHaveCount(1);
+});
+
+describe('deferred payloads', function (): void {
+    beforeEach(function (): void {
+        actingAsUserWith([Permissions::STATS_VIEW]);
+    });
+
+    it('serves a widget\'s payload from the URL its dashboard data carries, with only the options it reads', function (): void {
+        $a = dashboardPackage('Accessibility');
+        $b = dashboardPackage('Icons');
+        snapshot($a, '2026-10-06', ['downloads_monthly' => 40]);
+        snapshot($b, '2026-10-06', ['downloads_monthly' => 7]);
+
+        $url = DashboardWidgetData::deferred(DashboardWidgetData::DOWNLOADS_KPI, [
+            'metric'  => 'monthly',
+            'package' => (string) $a->id,
+            'title'   => 'Unrelated',
+        ])['deferred'];
+
+        expect($url)->not->toContain('title');
+
+        $this->getJson($url)->assertOk()->assertExactJson([
+            'metric'  => 'monthly',
+            'package' => ['id' => $a->id, 'title' => 'Accessibility'],
+            'value'   => 40,
+            'asOf'    => '2026-10-06',
+        ]);
+    });
+
+    it('clamps or defaults an option the URL carries', function (string $range, int $expected): void {
+        $this->getJson('/admin/artisanpack-ui/widgets/stats/downloads-trend?range=' . $range)
+            ->assertOk()
+            ->assertJsonPath('range', $expected);
+    })->with([
+        'past the longest range' => ['9999', 365],
+        'not a number'           => ['soon', DashboardWidgetData::TREND_DEFAULT_RANGE],
+    ]);
+
+    it('answers 404 for a widget it doesn\'t serve', function (): void {
+        $this->getJson('/admin/artisanpack-ui/widgets/stats/board')->assertNotFound();
+    });
+
+    it('refuses a stats payload without the stats permission', function (): void {
+        actingAsUserWith([Permissions::ISSUES_MANAGE]);
+
+        $this->getJson('/admin/artisanpack-ui/widgets/stats/github-overview')->assertForbidden();
+    });
 });

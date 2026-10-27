@@ -6,6 +6,7 @@ use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Services\Board\BoardSummary;
 use ArtisanPackUI\Site\Services\Board\ProjectBoardReader;
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -178,6 +179,8 @@ describe('project reader', function (): void {
             projectIssue('PVTI_other', 'someone-else/accessibility', 5),
         ]);
         fakeGitHubGraphql([$page, $page]);
+
+        app(BoardSummary::class)->refresh();
 
         expect(array_map(fn ($item) => $item->id, app(ProjectBoardReader::class)->read()->items))->toBe(['PVTI_org'])
             ->and(app(BoardSummary::class)->summarize([])['total'])->toBe(1);
@@ -390,6 +393,8 @@ describe('dashboard board widget', function (): void {
             projectIssue('PVTI_3', 'ArtisanPack-UI/icons', 3, 'opt-todo'),
             projectIssue('PVTI_4', 'ArtisanPack-UI/unmapped', 4, null),
         ])]);
+
+        app(BoardSummary::class)->refresh();
     });
 
     it('counts every card per Status column', function (): void {
@@ -405,7 +410,8 @@ describe('dashboard board widget', function (): void {
             ->and($summary['packages'])->toBe([])
             ->and($summary['project'])->toBe(['title' => 'ArtisanPack UI', 'url' => 'https://github.com/orgs/ArtisanPack-UI/projects/7'])
             ->and($summary['boardUrl'])->toBe(url('/admin/artisanpack-ui'))
-            ->and($summary['error'])->toBeNull();
+            ->and($summary['error'])->toBeNull()
+            ->and($summary['pending'])->toBeFalse();
     });
 
     it('counts only the chosen packages and links to the board filtered to them', function (): void {
@@ -445,14 +451,103 @@ describe('dashboard board widget', function (): void {
         Http::assertSentCount(2);
     });
 
+    it('serves the counts for the chosen packages from the URL its dashboard data carries', function (): void {
+        $url = DashboardWidgetData::deferred(DashboardWidgetData::BOARD, ['packages' => [(string) $this->icons->id, 'none']])['deferred'];
+
+        $this->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('packages', [['id' => $this->icons->id, 'title' => 'Icons']]);
+    });
+
     it('reports a GitHub failure instead of throwing', function (): void {
         IntegrationSettings::current()->update(['github_project_number' => null]);
+        app(BoardSummary::class)->refresh();
 
         $summary = app(BoardSummary::class)->summarize([]);
 
         expect($summary['error'])->toContain('project number')
+            ->and($summary['pending'])->toBeFalse()
             ->and($summary['columns'])->toBe([])
             ->and($summary['total'])->toBe(0);
+    });
+});
+
+describe('board widget refresh', function (): void {
+    beforeEach(function (): void {
+        boardPackage('Accessibility', 'ArtisanPack-UI/accessibility');
+        $this->url = DashboardWidgetData::deferred(DashboardWidgetData::BOARD, [])['deferred'];
+    });
+
+    it('is pending until its first read of the project, which runs after the response', function (): void {
+        fakeGitHubGraphql([projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)])]);
+
+        $this->getJson($this->url)->assertOk()->assertJsonPath('pending', true)->assertJsonPath('total', 0);
+        $this->getJson($this->url)->assertOk()->assertJsonPath('pending', false)->assertJsonPath('total', 1);
+    });
+
+    it('serves stale counts while it reads the project again after the response', function (): void {
+        fakeGitHubGraphql([
+            projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)]),
+            projectPage([
+                projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1),
+                projectIssue('PVTI_2', 'ArtisanPack-UI/accessibility', 2),
+            ]),
+        ]);
+        app(BoardSummary::class)->refresh();
+        $this->travel(BoardSummary::TTL)->seconds();
+
+        $this->getJson($this->url)->assertOk()->assertJsonPath('total', 1);
+        $this->getJson($this->url)->assertOk()->assertJsonPath('total', 2);
+    });
+
+    it('keeps the cached counts when a read fails, and waits out the cache window before trying again', function (): void {
+        fakeGitHubGraphql([
+            projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)]),
+            ['data' => ['organization' => ['projectV2' => null]]],
+        ]);
+        app(BoardSummary::class)->refresh();
+        $this->travel(BoardSummary::TTL)->seconds();
+        app(BoardSummary::class)->refresh();
+
+        $this->getJson($this->url)
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('error', null)
+            ->assertJsonPath('warning', fn (string $warning): bool => str_contains($warning, 'out of date'));
+
+        Http::assertSentCount(3);
+    });
+
+    it('shows the error instead of counts that have failed to refresh for too long', function (): void {
+        fakeGitHubGraphql([
+            projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)]),
+            ['data' => ['organization' => ['projectV2' => null]]],
+        ]);
+        app(BoardSummary::class)->refresh();
+        $this->travel(BoardSummary::STALE_TTL)->seconds();
+        app(BoardSummary::class)->refresh();
+
+        expect(app(BoardSummary::class)->summarize([]))->toMatchArray(['total' => 0, 'columns' => [], 'pending' => false])
+            ->and(app(BoardSummary::class)->summarize([])['error'])->not->toBeNull();
+    });
+
+    it('reports an unexpected failure instead of staying pending', function (): void {
+        $this->mock(ProjectBoardReader::class)->shouldReceive('read')->once()->andThrow(new RuntimeException('Unexpected shape'));
+
+        app(BoardSummary::class)->refresh();
+
+        expect(app(BoardSummary::class)->summarize([]))->toMatchArray([
+            'error'   => 'The project board couldn\'t be read. The error has been logged.',
+            'pending' => false,
+        ]);
+    });
+
+    it('skips a refresh queued while another request was reading', function (): void {
+        fakeGitHubGraphql([projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)])]);
+
+        expect(app(BoardSummary::class)->refresh())->toBeTrue()
+            ->and(app(BoardSummary::class)->refresh())->toBeFalse();
     });
 });
 
@@ -467,4 +562,5 @@ it('refuses the board endpoints without the issues permission', function (string
     'global board'  => ['GET', '/admin/artisanpack-ui/board'],
     'package board' => ['GET', '/admin/artisanpack-ui/packages/{package}/board'],
     'move'          => ['PUT', '/admin/artisanpack-ui/board/items/PVTI_1/status'],
+    'board widget'  => ['GET', '/admin/artisanpack-ui/widgets/board'],
 ]);

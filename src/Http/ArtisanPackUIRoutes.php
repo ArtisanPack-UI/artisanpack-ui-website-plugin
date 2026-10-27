@@ -6,12 +6,14 @@ namespace ArtisanPackUI\Site\Http;
 
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
 use ArtisanPackUI\Site\Http\Controllers\BoardController;
+use ArtisanPackUI\Site\Http\Controllers\DashboardWidgetController;
 use ArtisanPackUI\Site\Http\Controllers\IconController;
 use ArtisanPackUI\Site\Http\Controllers\IssueController;
 use ArtisanPackUI\Site\Http\Controllers\PackageDocsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageStatsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageSyncController;
 use ArtisanPackUI\Site\Http\Controllers\SettingsController;
+use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Support\Facades\Route;
 
@@ -98,6 +100,16 @@ final class ArtisanPackUIRoutes
      * spending the App's hourly quota for everyone.
      */
     public const BOARD_READ_LIMIT = 20;
+
+    /**
+     * Requests per minute, per user, to the dashboard widgets' payloads,
+     * counted apart from the other limits. Every widget on a dashboard
+     * fetches its own on each load, and a pending board widget asks again
+     * every few seconds. The board widget's counts are cached
+     * ({@see \ArtisanPackUI\Site\Services\Board\BoardSummary::TTL}), so
+     * this doesn't open up GitHub the way the board reads would.
+     */
+    public const WIDGET_LIMIT = 300;
 
     /**
      * The `{package}` placeholder in the per-package endpoint templates
@@ -200,6 +212,21 @@ final class ArtisanPackUIRoutes
                 Route::name('packages.stats')
                     ->middleware(['permission:' . Permissions::STATS_VIEW, 'throttle:' . self::STATS_LIMIT . ',1'])
                     ->get('packages/{package}/stats', [PackageStatsController::class, 'show']);
+
+                // The dashboard widgets' payloads, fetched once the dashboard
+                // has rendered.
+                Route::prefix('widgets')->name('widgets.')
+                    ->middleware('throttle:' . self::WIDGET_LIMIT . ',1,artisanpack-ui-widgets')
+                    ->group(function (): void {
+                        Route::name('board')
+                            ->middleware('permission:' . Permissions::ISSUES_MANAGE)
+                            ->get('board', [DashboardWidgetController::class, 'board']);
+
+                        Route::name('stats')
+                            ->middleware('permission:' . Permissions::STATS_VIEW)
+                            ->get('stats/{widget}', [DashboardWidgetController::class, 'stats'])
+                            ->whereIn('widget', DashboardWidgetData::STATS_WIDGETS);
+                    });
 
                 // The icon picker on Edit Package. Icons are public data, so
                 // any plugin permission will do.
