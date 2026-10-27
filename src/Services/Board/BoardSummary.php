@@ -144,23 +144,25 @@ class BoardSummary
 
         return (bool) CacheLocks::lock($key . ':refresh', self::REFRESH_SECONDS)->get(function () use ($key): bool {
             $previous = $this->entry();
-            $now      = now()->getTimestamp();
 
             // A request that queued its refresh while another was reading.
-            if (null !== $previous && $now - $previous['at'] < self::TTL) {
+            if (null !== $previous && now()->getTimestamp() - $previous['at'] < self::TTL) {
                 return false;
             }
 
             @set_time_limit(self::REFRESH_SECONDS);
 
+            // Each entry is stamped when its read ends, not when it starts:
+            // a read can take most of the TTL.
             try {
-                $entry = ['counts' => $this->read(), 'countsAt' => $now, 'error' => null, 'at' => $now];
+                $counts = $this->read();
+                $entry  = ['counts' => $counts, 'countsAt' => now()->getTimestamp(), 'error' => null, 'at' => now()->getTimestamp()];
             } catch (GitHubException|IntegrationNotConfiguredException $exception) {
-                $entry = self::failed($previous, $exception->getMessage(), $now);
+                $entry = self::failed($previous, $exception->getMessage(), now()->getTimestamp());
             } catch (Throwable $exception) {
                 report($exception);
 
-                $entry = self::failed($previous, __('The project board couldn\'t be read. The error has been logged.'), $now);
+                $entry = self::failed($previous, __('The project board couldn\'t be read. The error has been logged.'), now()->getTimestamp());
             }
 
             $this->cache->put($key, $entry, self::STALE_TTL);

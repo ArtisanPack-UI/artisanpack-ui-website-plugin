@@ -543,6 +543,21 @@ describe('board widget refresh', function (): void {
         ]);
     });
 
+    it('counts the cache window from when a read ends, not when it starts', function (): void {
+        Http::fake([
+            'api.github.com/app/installations/*' => Http::response(['token' => 'ghs_1', 'expires_at' => now()->addHour()->toIso8601String()], 201),
+            'api.github.com/graphql'             => function () {
+                $this->travel(BoardSummary::TTL - 10)->seconds();
+
+                return Http::response(projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)]));
+            },
+        ]);
+        app(BoardSummary::class)->refresh();
+        $this->travel(20)->seconds();
+
+        expect(app(BoardSummary::class)->refresh())->toBeFalse();
+    });
+
     it('skips a refresh queued while another request was reading', function (): void {
         fakeGitHubGraphql([projectPage([projectIssue('PVTI_1', 'ArtisanPack-UI/accessibility', 1)])]);
 
