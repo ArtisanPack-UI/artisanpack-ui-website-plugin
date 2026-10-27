@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-27
+
 ### Changed
 
 - **Dashboard widgets load their data after the dashboard renders.** The
@@ -17,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and fetches the payload from the new `artisanpack-ui.widgets.stats` and
   `artisanpack-ui.widgets.board` endpoints, behind the same permissions as
   before. A widget whose payload fails to load says why and offers to try
-  again.
+  again (#50).
 - **The board widget never waits on GitHub.** Reading the org project can
   take about 30 seconds, so the widget now serves the last counts it has,
   however old, and reads the project again once the response has been sent
@@ -25,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed read keeps the last counts for up to a week, with a note that
   they may be out of date, and then shows the error. Before the very first
   read finishes, the widget keeps its skeleton up and checks back every
-  few seconds.
+  few seconds (#50).
 
 ## [1.2.1] - 2026-10-23
 

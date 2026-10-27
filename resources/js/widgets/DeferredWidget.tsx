@@ -12,6 +12,8 @@
  * reading what it needs in the background (the board widget, before its
  * first read of the project finishes). The skeleton then stays up and the
  * payload is fetched again every {@link PENDING_RETRY_MS}.
+ *
+ * @since 1.3.0
  */
 
 import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType } from 'react';
