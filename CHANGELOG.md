@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Release announcements carry `#Laravel` and `#OpenSource`.** The hashtags
+  go on their own line above the release link. Mastodon links them from the
+  text; Bluesky posts carry a `#tag` facet for each, so they're real,
+  searchable tags there too. They count toward Bluesky's 300-grapheme limit,
+  which still drops the title (and then shortens the repository name) when a
+  post would run over.
+
 ## [1.4.0] - 2026-11-03
 
 ### Added

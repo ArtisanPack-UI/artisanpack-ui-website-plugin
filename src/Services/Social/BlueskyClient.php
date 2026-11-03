@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\Http;
  * password) through `com.atproto.server.createSession`, then writes an
  * `app.bsky.feed.post` record. Bluesky doesn't link URLs in a post's text by
  * itself, so the post carries a link facet over the release URL and an
- * external embed that renders it as a card.
+ * external embed that renders it as a card. Hashtags likewise only become
+ * tags through `#tag` facets.
  *
  * Each post's record key comes from the release
  * ({@see ReleaseAnnouncement::blueskyRecordKey()}), and the post is looked
@@ -73,16 +74,19 @@ class BlueskyClient
             'text'      => $text,
             'createdAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
             'langs'     => ['en'],
-            'facets'    => [[
-                'index' => [
-                    'byteStart' => strlen($text) - strlen($announcement->url),
-                    'byteEnd'   => strlen($text),
+            'facets'    => [
+                [
+                    'index' => [
+                        'byteStart' => strlen($text) - strlen($announcement->url),
+                        'byteEnd'   => strlen($text),
+                    ],
+                    'features' => [[
+                        '$type' => 'app.bsky.richtext.facet#link',
+                        'uri'   => $announcement->url,
+                    ]],
                 ],
-                'features' => [[
-                    '$type' => 'app.bsky.richtext.facet#link',
-                    'uri'   => $announcement->url,
-                ]],
-            ]],
+                ...self::tagFacets($announcement->hashtagOffsets($text)),
+            ],
             'embed' => [
                 '$type'    => 'app.bsky.embed.external',
                 'external' => [
@@ -107,6 +111,27 @@ class BlueskyClient
         }
 
         return $uri;
+    }
+
+    /**
+     * A `#tag` facet per hashtag.
+     *
+     * @param  array<string, array{byteStart: int, byteEnd: int}>  $offsets
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function tagFacets(array $offsets): array
+    {
+        $facets = [];
+
+        foreach ($offsets as $tag => $index) {
+            $facets[] = [
+                'index'    => $index,
+                'features' => [['$type' => 'app.bsky.richtext.facet#tag', 'tag' => $tag]],
+            ];
+        }
+
+        return $facets;
     }
 
     /**

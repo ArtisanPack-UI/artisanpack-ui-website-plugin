@@ -301,12 +301,12 @@ describe('webhook', function (): void {
 
 describe('announcement text', function (): void {
     it('announces the repository and tag, with the release URL last', function (): void {
-        expect(seoAnnouncement()->text())->toBe("📦 seo v1.9.0 is out!\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0");
+        expect(seoAnnouncement()->text())->toBe("📦 seo v1.9.0 is out!\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0");
     });
 
     it('adds the release title when it says more than the tag', function (): void {
         expect(seoAnnouncement('Public URL support')->text())
-            ->toBe("📦 seo v1.9.0 is out!\nPublic URL support\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0")
+            ->toBe("📦 seo v1.9.0 is out!\nPublic URL support\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0")
             ->and(seoAnnouncement('seo v1.9.0')->summary())->toBe('');
     });
 
@@ -347,6 +347,16 @@ describe('announcement text', function (): void {
             ->and(strcmp($announcement->blueskyRecordKey(), $later->blueskyRecordKey()))->toBeLessThan(0);
     });
 
+    it('finds the real hashtags, not a defused one in the title', function (): void {
+        $announcement = seoAnnouncement('Now on #Laravel 13 🎉');
+        $text         = $announcement->text();
+        $offsets      = $announcement->hashtagOffsets($text);
+
+        expect(array_keys($offsets))->toBe(['Laravel', 'OpenSource'])
+            ->and(substr($text, $offsets['Laravel']['byteStart'], 8))->toBe('#Laravel')
+            ->and($offsets['Laravel']['byteStart'])->toBeGreaterThan(strpos($text, "\u{200B}Laravel"));
+    });
+
     it('cuts a long release title short', function (): void {
         $summary = seoAnnouncement(str_repeat('é', 150))->summary();
 
@@ -384,6 +394,14 @@ describe('posting', function (): void {
                 && 'https://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0' === $linked
                 && $facet['features'][0]['uri'] === $linked
                 && 'app.bsky.embed.external' === $record['embed']['$type']
+                && [['tag' => 'Laravel', 'text' => '#Laravel'], ['tag' => 'OpenSource', 'text' => '#OpenSource']] === array_map(
+                    static fn (array $tagFacet): array => [
+                        'tag'  => $tagFacet['features'][0]['tag'],
+                        'text' => substr($record['text'], $tagFacet['index']['byteStart'], $tagFacet['index']['byteEnd'] - $tagFacet['index']['byteStart']),
+                    ],
+                    array_slice($record['facets'], 1),
+                )
+                && 'app.bsky.richtext.facet#tag' === $record['facets'][1]['features'][0]['$type']
                 && 'seo v1.9.0' === $record['embed']['external']['title']
                 && 'Public URL support' === $record['embed']['external']['description'];
         });
