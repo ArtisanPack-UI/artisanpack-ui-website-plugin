@@ -27,6 +27,13 @@ final readonly class ReleaseAnnouncement
     public const POST_LIMIT = 300;
 
     /**
+     * Hashtags added to every post, without the `#`.
+     *
+     * @var list<string>
+     */
+    public const HASHTAGS = ['Laravel', 'OpenSource'];
+
+    /**
      * The alphabet of an AT Protocol TID (base32, sortable).
      */
     private const TID_ALPHABET = '234567abcdefghijklmnopqrstuvwxyz';
@@ -116,8 +123,9 @@ final readonly class ReleaseAnnouncement
     }
 
     /**
-     * The post: the headline, the title when it adds anything, and the
-     * release URL as the last line (Bluesky's link facet relies on that).
+     * The post: the headline, the title when it adds anything, the
+     * hashtags, and the release URL as the last line (Bluesky's link facet
+     * relies on that).
      */
     public function text(): string
     {
@@ -161,6 +169,46 @@ final readonly class ReleaseAnnouncement
         return $key;
     }
 
+    /**
+     * The hashtags line, e.g. `#Laravel #OpenSource`.
+     */
+    public function hashtagLine(): string
+    {
+        return implode(' ', array_map(static fn (string $tag): string => '#' . $tag, self::HASHTAGS));
+    }
+
+    /**
+     * Where each hashtag sits in `$text`, as UTF-8 byte offsets (what
+     * Bluesky's facets index by), keyed by the tag without its `#`.
+     *
+     * Found from the end of the text, where {@see self::compose()} puts the
+     * hashtags line: the title can't hold a matching tag, since its `#`s are
+     * defused.
+     *
+     * @return array<string, array{byteStart: int, byteEnd: int}>
+     */
+    public function hashtagOffsets(string $text): array
+    {
+        $line = $this->hashtagLine();
+        $at   = strrpos($text, $line);
+
+        if (false === $at) {
+            return [];
+        }
+
+        $offsets = [];
+
+        foreach (self::HASHTAGS as $tag) {
+            $start = strpos($text, '#' . $tag, $at);
+
+            if (false !== $start) {
+                $offsets[$tag] = ['byteStart' => $start, 'byteEnd' => $start + strlen('#' . $tag)];
+            }
+        }
+
+        return $offsets;
+    }
+
     private function compose(string $summary, ?string $repository = null): string
     {
         $lines = ['📦 ' . $this->headline($repository)];
@@ -168,6 +216,8 @@ final readonly class ReleaseAnnouncement
         if ('' !== $summary) {
             $lines[] = $summary;
         }
+
+        $lines[] = $this->hashtagLine();
 
         return implode("\n", $lines) . "\n\n" . $this->url;
     }
