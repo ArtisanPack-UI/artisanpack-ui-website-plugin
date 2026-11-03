@@ -7,10 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Release announcements no longer start with an emoji.** A post now opens
-  with the headline itself, e.g. "seo v1.9.0 is out!".
+## [1.4.1] - 2026-11-03
 
 ### Added
 
@@ -19,7 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   text; Bluesky posts carry a `#tag` facet for each, so they're real,
   searchable tags there too. They count toward Bluesky's 300-grapheme limit,
   which still drops the title (and then shortens the repository name) when a
-  post would run over.
+  post would run over (#54).
+
+### Changed
+
+- **Release announcements no longer start with an emoji.** A post now opens
+  with the headline itself, e.g. "seo v1.9.0 is out!" (#55).
 
 ## [1.4.0] - 2026-11-03
 
