@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Release announcements no longer start with an emoji.** A post now opens
+  with the headline itself, e.g. "seo v1.9.0 is out!".
+
 ### Added
 
 - **Release announcements carry `#Laravel` and `#OpenSource`.** The hashtags

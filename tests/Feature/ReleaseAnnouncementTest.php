@@ -301,12 +301,12 @@ describe('webhook', function (): void {
 
 describe('announcement text', function (): void {
     it('announces the repository and tag, with the release URL last', function (): void {
-        expect(seoAnnouncement()->text())->toBe("📦 seo v1.9.0 is out!\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0");
+        expect(seoAnnouncement()->text())->toBe("seo v1.9.0 is out!\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0");
     });
 
     it('adds the release title when it says more than the tag', function (): void {
         expect(seoAnnouncement('Public URL support')->text())
-            ->toBe("📦 seo v1.9.0 is out!\nPublic URL support\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0")
+            ->toBe("seo v1.9.0 is out!\nPublic URL support\n#Laravel #OpenSource\n\nhttps://github.com/ArtisanPack-UI/seo/releases/tag/v1.9.0")
             ->and(seoAnnouncement('seo v1.9.0')->summary())->toBe('');
     });
 
