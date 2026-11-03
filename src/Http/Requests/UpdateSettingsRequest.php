@@ -14,13 +14,15 @@ use Illuminate\Validation\Validator;
  * Validates a save from the plugin's Settings page.
  *
  * Secrets are write-only: the page never receives the stored docs API
- * token or GitHub private key, so an empty value means "keep what's
- * stored", and the `remove_*` flags clear one explicitly. Authorization is
+ * token, GitHub private key, webhook secret, Bluesky app password or
+ * Mastodon access token, so an empty value means "keep what's stored", and
+ * the `remove_*` flags clear one explicitly. Authorization is
  * the route's `permission:` middleware.
  *
  * Keeping a stored secret is only allowed while it keeps going where it
- * went before: changing the docs site's origin, or the GitHub App or
- * installation ID, requires re-entering the token or private key (see
+ * went before: changing the docs site's or Mastodon instance's origin, or
+ * the GitHub App or installation ID, requires re-entering the token or
+ * private key (see
  * {@see self::after()}). Otherwise anyone allowed to save settings could
  * point the stored token at a host they control.
  *
@@ -28,6 +30,17 @@ use Illuminate\Validation\Validator;
  */
 final class UpdateSettingsRequest extends FormRequest
 {
+    /**
+     * A Bluesky handle (a domain name, optionally with a leading `@`) or an
+     * account's `did:plc:` identifier.
+     */
+    public const BLUESKY_HANDLE_PATTERN = '/^@?(?:did:plc:[a-z2-7]{24}|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)$/';
+
+    /**
+     * A GitHub repository name.
+     */
+    public const REPOSITORY_PATTERN = '/^[a-z0-9._-]{1,100}$/';
+
     public function authorize(): bool
     {
         return true;
@@ -48,6 +61,16 @@ final class UpdateSettingsRequest extends FormRequest
             'remove_github_private_key' => ['sometimes', 'boolean'],
             'github_organization'       => ['nullable', 'string', 'max:39', 'regex:/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/'],
             'github_project_number'     => ['nullable', 'integer', 'min:1'],
+
+            'github_webhook_secret'              => ['nullable', 'string', 'min:20', 'max:255'],
+            'remove_github_webhook_secret'       => ['sometimes', 'boolean'],
+            'bluesky_handle'                     => ['nullable', 'string', 'max:253', 'regex:' . self::BLUESKY_HANDLE_PATTERN],
+            'bluesky_app_password'               => ['nullable', 'string', 'max:255'],
+            'remove_bluesky_app_password'        => ['sometimes', 'boolean'],
+            'mastodon_instance_url'              => ['nullable', 'string', 'max:255', 'url:http,https', $this->outboundUrlRule()],
+            'mastodon_access_token'              => ['nullable', 'string', 'max:2000'],
+            'remove_mastodon_access_token'       => ['sometimes', 'boolean'],
+            'announcement_excluded_repositories' => ['nullable', 'string', 'max:5000', $this->repositoryListRule()],
         ];
     }
 
@@ -69,6 +92,14 @@ final class UpdateSettingsRequest extends FormRequest
 
                 if (null !== $origin && $origin !== self::origin($settings->docsBaseUrl())) {
                     $validator->errors()->add('docs_api_token', __('Re-enter the API token when you change the docs site URL.'));
+                }
+            }
+
+            if ($this->keepsStoredSecret($settings->mastodon_access_token, 'mastodon_access_token', 'remove_mastodon_access_token')) {
+                $origin = self::origin($this->input('mastodon_instance_url'));
+
+                if (null !== $origin && $origin !== self::origin($settings->mastodonInstanceUrl())) {
+                    $validator->errors()->add('mastodon_access_token', __('Re-enter the access token when you change the Mastodon instance URL.'));
                 }
             }
 
@@ -99,6 +130,13 @@ final class UpdateSettingsRequest extends FormRequest
             'github_private_key'     => __('private key'),
             'github_organization'    => __('organization'),
             'github_project_number'  => __('project number'),
+
+            'github_webhook_secret'              => __('webhook secret'),
+            'bluesky_handle'                     => __('Bluesky handle'),
+            'bluesky_app_password'               => __('app password'),
+            'mastodon_instance_url'              => __('Mastodon instance URL'),
+            'mastodon_access_token'              => __('access token'),
+            'announcement_excluded_repositories' => __('excluded repositories'),
         ];
     }
 
@@ -114,6 +152,23 @@ final class UpdateSettingsRequest extends FormRequest
 
             if (null !== $problem) {
                 $fail($problem);
+            }
+        };
+    }
+
+    /**
+     * Every name in the excluded repositories list (one per line, or
+     * comma-separated) must be a GitHub repository name.
+     */
+    private function repositoryListRule(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            foreach (IntegrationSettings::parseRepositoryList((string) $value) as $name) {
+                if (1 !== preg_match(self::REPOSITORY_PATTERN, $name)) {
+                    $fail(__('":name" isn\'t a repository name. List one repository name per line, without the org.', ['name' => $name]));
+
+                    return;
+                }
             }
         };
     }

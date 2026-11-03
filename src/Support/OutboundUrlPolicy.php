@@ -21,8 +21,12 @@ use Closure;
  * that doesn't resolve at all. Local development allows http and any host,
  * so a `.test` docs site on loopback works.
  *
+ * The Mastodon instance URL is held to the same policy, since the server
+ * sends the Mastodon access token to it.
+ *
  * The check runs when the URL is saved and again before every request:
- * {@see \ArtisanPackUI\Site\Services\Docs\DocsSiteClient} pins the
+ * {@see \ArtisanPackUI\Site\Services\Docs\DocsSiteClient} (and
+ * {@see \ArtisanPackUI\Site\Services\Social\MastodonClient}) pins the
  * connection to an address {@see self::resolve()} vetted, so a DNS answer
  * that changes between the check and the request (DNS rebinding) can't
  * redirect it. The client also refuses redirects, so an allowed host can't
@@ -97,6 +101,29 @@ final class OutboundUrlPolicy
         }
 
         return ['problem' => null, 'ips' => $ips];
+    }
+
+    /**
+     * The `CURLOPT_RESOLVE` entry pinning the URL's host to the first
+     * address {@see self::resolve()} vetted, or null when there is nothing
+     * to pin (local development, or a host that is already an IP).
+     *
+     * @param  list<string>  $ips
+     *
+     * @since 1.4.0
+     */
+    public static function curlResolvePin(string $url, array $ips): ?string
+    {
+        $host = trim((string) parse_url($url, PHP_URL_HOST), '[]');
+
+        if ([] === $ips || '' === $host || false !== filter_var($host, FILTER_VALIDATE_IP)) {
+            return null;
+        }
+
+        $port = parse_url($url, PHP_URL_PORT) ?? ('https' === strtolower((string) parse_url($url, PHP_URL_SCHEME)) ? 443 : 80);
+        $ip   = str_contains($ips[0], ':') ? '[' . $ips[0] . ']' : $ips[0];
+
+        return "{$host}:{$port}:{$ip}";
     }
 
     /**

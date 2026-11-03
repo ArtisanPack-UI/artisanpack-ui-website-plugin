@@ -287,3 +287,176 @@ it('limits how often the connection checks can run', function (): void {
 
     $this->postJson('/admin/artisanpack-ui/settings/test/docs')->assertTooManyRequests();
 });
+
+describe('release announcement settings', function (): void {
+    /**
+     * @return array<string, mixed>
+     */
+    function announcementSettings(array $overrides = []): array
+    {
+        return validSettings([
+            'github_webhook_secret'              => 'a-webhook-secret-of-some-length',
+            'bluesky_handle'                     => '@artisanpackui.bsky.social',
+            'bluesky_app_password'               => 'abcd-efgh-ijkl-mnop',
+            'mastodon_instance_url'              => 'https://mastodon.example/',
+            'mastodon_access_token'              => 'mastodon-token',
+            'announcement_excluded_repositories' => "artisanpack-ui-website-theme\nArtisanPack-UI-Website-Plugin, forms\n\nforms",
+            ...$overrides,
+        ]);
+    }
+
+    it('saves the announcement settings and encrypts the secrets at rest', function (): void {
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings())
+            ->assertOk()
+            ->assertJsonPath('settings.hasWebhookSecret', true)
+            ->assertJsonPath('settings.blueskyHandle', 'artisanpackui.bsky.social')
+            ->assertJsonPath('settings.hasBlueskyAppPassword', true)
+            ->assertJsonPath('settings.mastodonInstanceUrl', 'https://mastodon.example')
+            ->assertJsonPath('settings.hasMastodonAccessToken', true)
+            ->assertJsonPath('settings.excludedRepositories', ['artisanpack-ui-website-theme', 'artisanpack-ui-website-plugin', 'forms']);
+
+        $settings = IntegrationSettings::current();
+        $raw      = DB::table('artisanpack_ui_settings')->first();
+
+        foreach (['github_webhook_secret', 'bluesky_app_password', 'mastodon_access_token'] as $column) {
+            expect($raw->{$column})->not->toBeNull()->not->toContain($settings->{$column});
+        }
+    });
+
+    it('never sends the announcement secrets to the browser', function (): void {
+        IntegrationSettings::create(announcementSettings());
+
+        $this->get('/admin/artisanpack-ui/settings')
+            ->assertOk()
+            ->assertDontSee('a-webhook-secret-of-some-length')
+            ->assertDontSee('abcd-efgh-ijkl-mnop')
+            ->assertDontSee('mastodon-token')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('settings.hasWebhookSecret', true)
+                ->where('endpoints.webhook', url('/plugins/artisanpack-ui/webhooks/github'))
+                ->has('endpoints.testBluesky')
+                ->has('endpoints.testMastodon'));
+    });
+
+    it('excludes the site theme and plugin until a list is saved', function (): void {
+        expect(IntegrationSettings::current()->excludedRepositories())->toBe(IntegrationSettings::DEFAULT_EXCLUDED_REPOSITORIES);
+    });
+
+    it('saves an empty exclusion list as excluding nothing', function (?string $list): void {
+        IntegrationSettings::create(announcementSettings());
+
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings([
+            'github_webhook_secret'              => '',
+            'bluesky_app_password'               => '',
+            'mastodon_access_token'              => '',
+            'announcement_excluded_repositories' => $list,
+        ]))->assertOk()->assertJsonPath('settings.excludedRepositories', []);
+    })->with(['empty' => [''], 'null' => [null]]);
+
+    it('keeps the exclusion list when a save leaves it out', function (): void {
+        IntegrationSettings::create(announcementSettings(['announcement_excluded_repositories' => 'forms']));
+
+        $payload = announcementSettings(['github_webhook_secret' => '', 'bluesky_app_password' => '', 'mastodon_access_token' => '']);
+        unset($payload['announcement_excluded_repositories']);
+
+        $this->putJson('/admin/artisanpack-ui/settings', $payload)->assertOk()->assertJsonPath('settings.excludedRepositories', ['forms']);
+    });
+
+    it('requires the Mastodon token again when the instance moves to another host', function (): void {
+        IntegrationSettings::create(announcementSettings());
+
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings([
+            'mastodon_instance_url' => 'https://attacker.example',
+            'mastodon_access_token' => '',
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['mastodon_access_token' => 'Re-enter the access token when you change the Mastodon instance URL.']);
+    });
+
+    it('clears the announcement secrets on request', function (): void {
+        IntegrationSettings::create(announcementSettings());
+
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings([
+            'github_webhook_secret'        => '',
+            'bluesky_app_password'         => '',
+            'mastodon_access_token'        => '',
+            'remove_github_webhook_secret' => true,
+            'remove_bluesky_app_password'  => true,
+            'remove_mastodon_access_token' => true,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('settings.hasWebhookSecret', false)
+            ->assertJsonPath('settings.hasBlueskyAppPassword', false)
+            ->assertJsonPath('settings.hasMastodonAccessToken', false);
+    });
+
+    it('rejects invalid announcement settings', function (array $overrides, string $field): void {
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings($overrides))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors($field);
+    })->with([
+        'short secret'      => [['github_webhook_secret' => 'too-short'], 'github_webhook_secret'],
+        'bad handle'        => [['bluesky_handle' => 'not a handle'], 'bluesky_handle'],
+        'bare handle'       => [['bluesky_handle' => 'artisanpackui'], 'bluesky_handle'],
+        'bad instance'      => [['mastodon_instance_url' => 'not a url'], 'mastodon_instance_url'],
+        'private instance'  => [['mastodon_instance_url' => 'https://localhost'], 'mastodon_instance_url'],
+        'org/repo excluded' => [['announcement_excluded_repositories' => 'ArtisanPack-UI/seo'], 'announcement_excluded_repositories'],
+    ]);
+
+    it('saves only the Mastodon instance origin', function (): void {
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings(['mastodon_instance_url' => 'https://Phpc.Social/@artisanpackui?x=1']))
+            ->assertOk()
+            ->assertJsonPath('settings.mastodonInstanceUrl', 'https://phpc.social');
+    });
+
+    it('accepts a DID as the Bluesky handle', function (): void {
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings(['bluesky_handle' => 'did:plc:abcdefghijklmnopqrstuvwx']))
+            ->assertOk();
+    });
+
+    it('passes the Bluesky check without posting', function (): void {
+        IntegrationSettings::create(announcementSettings());
+        Http::fake(['bsky.social/xrpc/com.atproto.server.createSession' => Http::response([
+            'accessJwt' => 'jwt',
+            'did'       => 'did:plc:abcdefghijklmnopqrstuvwx',
+            'handle'    => 'artisanpackui.bsky.social',
+        ])]);
+
+        $this->postJson('/admin/artisanpack-ui/settings/test/bluesky')
+            ->assertOk()
+            ->assertJson(['ok' => true, 'details' => ['Signed in as @artisanpackui.bsky.social.']]);
+
+        Http::assertSentCount(1);
+    });
+
+    it('fails the Bluesky check with an admin-friendly message', function (): void {
+        IntegrationSettings::create(announcementSettings());
+        Http::fake(['bsky.social/*' => Http::response(['error' => 'AuthenticationRequired'], 401)]);
+
+        $this->postJson('/admin/artisanpack-ui/settings/test/bluesky')
+            ->assertOk()
+            ->assertJson(['ok' => false])
+            ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'Bluesky rejected the handle or app password'));
+    });
+
+    it('passes the Mastodon check without posting', function (): void {
+        IntegrationSettings::create(announcementSettings());
+        Http::fake(['mastodon.example/api/v1/accounts/verify_credentials' => Http::response(['acct' => 'artisanpackui'])]);
+
+        $this->postJson('/admin/artisanpack-ui/settings/test/mastodon')
+            ->assertOk()
+            ->assertJson(['ok' => true])
+            ->assertJsonPath('details.0', 'Signed in as @artisanpackui.');
+    });
+
+    it('reports unconfigured networks without calling them', function (string $network): void {
+        Http::fake();
+
+        $this->postJson('/admin/artisanpack-ui/settings/test/' . $network)
+            ->assertOk()
+            ->assertJson(['ok' => false])
+            ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'isn\'t configured'));
+
+        Http::assertNothingSent();
+    })->with(['bluesky', 'mastodon']);
+});

@@ -7,9 +7,12 @@ namespace ArtisanPackUI\Site\Services;
 use ArtisanPackUI\Site\Exceptions\DocsSiteException;
 use ArtisanPackUI\Site\Exceptions\GitHubException;
 use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
+use ArtisanPackUI\Site\Exceptions\SocialPostException;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Services\Docs\DocsSiteClient;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
+use ArtisanPackUI\Site\Services\Social\BlueskyClient;
+use ArtisanPackUI\Site\Services\Social\MastodonClient;
 
 /**
  * The Settings page's "Test connection" checks, against the saved settings.
@@ -28,7 +31,58 @@ final class ConnectionTester
         private readonly IntegrationSettings $settings,
         private readonly DocsSiteClient $docs,
         private readonly GitHubAppClient $github,
+        private readonly BlueskyClient $bluesky,
+        private readonly MastodonClient $mastodon,
     ) {}
+
+    /**
+     * Sign in to Bluesky, which proves the handle and app password without
+     * posting anything.
+     *
+     * @return CheckResult
+     *
+     * @since 1.4.0
+     */
+    public function testBluesky(): array
+    {
+        try {
+            $handle = $this->bluesky->verify();
+        } catch (IntegrationNotConfiguredException|SocialPostException $exception) {
+            return self::failed($exception->getMessage());
+        }
+
+        return [
+            'ok'      => true,
+            'message' => __('Connected to Bluesky.'),
+            'details' => [__('Signed in as @:handle.', ['handle' => $handle])],
+        ];
+    }
+
+    /**
+     * Read the access token's Mastodon account, which proves the instance
+     * URL and token without posting anything.
+     *
+     * @return CheckResult
+     *
+     * @since 1.4.0
+     */
+    public function testMastodon(): array
+    {
+        try {
+            $account = $this->mastodon->verify();
+        } catch (IntegrationNotConfiguredException|SocialPostException $exception) {
+            return self::failed($exception->getMessage());
+        }
+
+        return [
+            'ok'      => true,
+            'message' => __('Connected to Mastodon.'),
+            'details' => [
+                __('Signed in as @:account.', ['account' => $account]),
+                __('Posting needs the token\'s write:statuses scope, which this check can\'t see.'),
+            ],
+        ];
+    }
 
     /**
      * List the docs site's packages, which proves the URL, the token and
