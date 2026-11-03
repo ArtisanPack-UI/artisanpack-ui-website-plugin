@@ -91,9 +91,9 @@ final readonly class ReleaseAnnouncement
     /**
      * The headline, e.g. "seo v1.9.0 is out!".
      */
-    public function headline(): string
+    public function headline(?string $repository = null): string
     {
-        return __(':repository :version is out!', ['repository' => $this->repository, 'version' => $this->tag]);
+        return __(':repository :version is out!', ['repository' => $repository ?? $this->repository, 'version' => $this->tag]);
     }
 
     /**
@@ -123,7 +123,22 @@ final readonly class ReleaseAnnouncement
     {
         $text = $this->compose($this->summary());
 
-        return self::graphemes($text) > self::POST_LIMIT ? $this->compose('') : $text;
+        if (self::graphemes($text) <= self::POST_LIMIT) {
+            return $text;
+        }
+
+        $text = $this->compose('');
+
+        if (self::graphemes($text) <= self::POST_LIMIT) {
+            return $text;
+        }
+
+        // Still too long: a very long repository name (it's in the URL
+        // too). Shorten the name in the headline; the URL stays whole.
+        $over = self::graphemes($text) - self::POST_LIMIT;
+        $keep = max(1, mb_strlen($this->repository) - $over - 1);
+
+        return $this->compose('', rtrim(mb_substr($this->repository, 0, $keep)) . '…');
     }
 
     /**
@@ -146,9 +161,9 @@ final readonly class ReleaseAnnouncement
         return $key;
     }
 
-    private function compose(string $summary): string
+    private function compose(string $summary, ?string $repository = null): string
     {
-        $lines = ['📦 ' . $this->headline()];
+        $lines = ['📦 ' . $this->headline($repository)];
 
         if ('' !== $summary) {
             $lines[] = $summary;

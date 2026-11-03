@@ -8,6 +8,7 @@ use ArtisanPackUI\Site\Jobs\PostReleaseAnnouncement;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Carbon;
+use Throwable;
 
 /**
  * Decides whether a `release` webhook delivery is announced, and queues a
@@ -78,8 +79,21 @@ final class ReleaseAnnouncer
             return self::outcome(false, 'no-networks');
         }
 
+        // Every network is queued even when one dispatch throws (under the
+        // sync driver a dispatch runs the job), then the first error is
+        // rethrown.
+        $failure = null;
+
         foreach ($networks as $network) {
-            PostReleaseAnnouncement::dispatch($network, $announcement);
+            try {
+                PostReleaseAnnouncement::dispatch($network, $announcement);
+            } catch (Throwable $exception) {
+                $failure ??= $exception;
+            }
+        }
+
+        if (null !== $failure) {
+            throw $failure;
         }
 
         return self::outcome(true, 'queued', array_map(static fn (SocialNetwork $network): string => $network->value, $networks));

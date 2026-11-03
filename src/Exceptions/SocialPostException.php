@@ -14,7 +14,9 @@ use Throwable;
  * {@see self::$status} is the HTTP status (0 when the network was never
  * reached). {@see self::$permanent} marks a failure that retrying won't fix,
  * such as rejected credentials or a post the network refused, so the
- * announcement job gives up at once instead of retrying it.
+ * announcement job gives up at once instead of retrying it. On a 429,
+ * {@see self::$retryAfter} is the seconds until the network's rate limit
+ * resets, when it said.
  *
  * @since 1.4.0
  */
@@ -25,6 +27,7 @@ final class SocialPostException extends RuntimeException
         public readonly int $status = 0,
         public readonly bool $permanent = false,
         ?Throwable $previous = null,
+        public readonly ?int $retryAfter = null,
     ) {
         parent::__construct($message, $status, $previous);
     }
@@ -52,7 +55,43 @@ final class SocialPostException extends RuntimeException
             ? __(':network answered with HTTP :status.', ['network' => $network, 'status' => $status])
             : __(':network answered with HTTP :status: :detail', ['network' => $network, 'status' => $status, 'detail' => $detail]);
 
-        return new self($message, $status, $status >= 400 && $status < 500 && 429 !== $status);
+        return new self(
+            $message,
+            $status,
+            $status >= 400 && $status < 500 && 429 !== $status,
+            null,
+            429 === $status ? self::secondsUntilReset($response) : null,
+        );
+    }
+
+    public function isRateLimited(): bool
+    {
+        return 429 === $this->status;
+    }
+
+    /**
+     * Seconds until the rate limit resets, from `Retry-After` (seconds),
+     * Bluesky's `RateLimit-Reset` (a Unix time) or Mastodon's
+     * `X-RateLimit-Reset` (an ISO 8601 time); null when none is usable.
+     */
+    private static function secondsUntilReset(Response $response): ?int
+    {
+        $retryAfter = $response->header('Retry-After');
+
+        if (is_numeric($retryAfter)) {
+            return max(0, (int) $retryAfter);
+        }
+
+        $reset = $response->header('RateLimit-Reset');
+
+        if (is_numeric($reset)) {
+            return max(0, (int) $reset - time());
+        }
+
+        $reset = $response->header('X-RateLimit-Reset');
+        $time  = '' === $reset ? false : strtotime($reset);
+
+        return false === $time ? null : max(0, $time - time());
     }
 
     public static function unreachable(string $network, ?Throwable $previous = null): self

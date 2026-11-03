@@ -403,6 +403,19 @@ describe('release announcement settings', function (): void {
         'org/repo excluded' => [['announcement_excluded_repositories' => 'ArtisanPack-UI/seo'], 'announcement_excluded_repositories'],
     ]);
 
+    it('refuses a new secret sent together with its removal', function (string $key): void {
+        IntegrationSettings::create(announcementSettings());
+
+        $this->putJson('/admin/artisanpack-ui/settings', announcementSettings([
+            'github_private_key' => '',
+            'docs_api_token'     => '',
+            $key                 => 'x-replacement-secret-value-long-enough',
+            'remove_' . $key     => true,
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors($key);
+    })->with(['docs_api_token', 'github_webhook_secret', 'bluesky_app_password', 'mastodon_access_token']);
+
     it('saves only the Mastodon instance origin', function (): void {
         $this->putJson('/admin/artisanpack-ui/settings', announcementSettings(['mastodon_instance_url' => 'https://Phpc.Social/@artisanpackui?x=1']))
             ->assertOk()

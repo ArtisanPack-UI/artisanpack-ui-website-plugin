@@ -37,6 +37,19 @@ final class UpdateSettingsRequest extends FormRequest
     public const BLUESKY_HANDLE_PATTERN = '/^@?(?:did:plc:[a-z2-7]{24}|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)$/';
 
     /**
+     * The write-only secrets, each with a `remove_{key}` flag.
+     *
+     * @var list<string>
+     */
+    public const SECRETS = [
+        'docs_api_token',
+        'github_private_key',
+        'github_webhook_secret',
+        'bluesky_app_password',
+        'mastodon_access_token',
+    ];
+
+    /**
      * A GitHub repository name.
      */
     public const REPOSITORY_PATTERN = '/^[a-z0-9._-]{1,100}$/';
@@ -86,6 +99,14 @@ final class UpdateSettingsRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             $settings = IntegrationSettings::current();
+
+            foreach (self::SECRETS as $key) {
+                if ($this->boolean('remove_' . $key) && '' !== self::trimmedInput($this->input($key))) {
+                    $validator->errors()->add($key, __('Enter a new :attribute or remove the saved one, not both.', [
+                        'attribute' => $this->attributes()[$key] ?? $key,
+                    ]));
+                }
+            }
 
             if ($this->keepsStoredSecret($settings->docs_api_token, 'docs_api_token', 'remove_docs_api_token')) {
                 $origin = self::origin($this->input('docs_base_url'));

@@ -48,7 +48,20 @@ final class PostReleaseAnnouncement implements ShouldQueue
      */
     public const POSTED_TTL_DAYS = 30;
 
-    public int $tries = 3;
+    /**
+     * Attempts in all, counting waits for a rate limit to reset.
+     */
+    public int $tries = 8;
+
+    /**
+     * Failures (not rate-limit waits) before the job gives up.
+     */
+    public int $maxExceptions = 3;
+
+    /**
+     * The shortest and longest wait for a rate limit to reset, in seconds.
+     */
+    public const RATE_LIMIT_WAIT = [60, 3600];
 
     public int $timeout = 60;
 
@@ -114,6 +127,15 @@ final class PostReleaseAnnouncement implements ShouldQueue
 
             return;
         } catch (SocialPostException $exception) {
+            if ($exception->isRateLimited()) {
+                // Wait for the network's reset rather than spending one of
+                // the job's $maxExceptions on it.
+                [$shortest, $longest] = self::RATE_LIMIT_WAIT;
+                $this->release(min($longest, max($shortest, $exception->retryAfter ?? 300)));
+
+                return;
+            }
+
             if ($exception->permanent) {
                 $this->fail($exception);
 

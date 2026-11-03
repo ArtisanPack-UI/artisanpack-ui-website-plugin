@@ -15,7 +15,7 @@
  * "Remove" clears it on the next save.
  */
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import { CARD_CLASS, PluginPage } from '../components/ui';
 import { ApiError, apiFetch } from '../lib/http';
@@ -70,6 +70,9 @@ function formFrom(settings: IntegrationSettings): FormState {
     };
 }
 
+type SecretKey = 'docs_api_token' | 'github_private_key' | 'github_webhook_secret' | 'bluesky_app_password' | 'mastodon_access_token';
+type SecretRemoveKey = `remove_${SecretKey}`;
+
 type CheckState = { running: boolean; result: ConnectionCheck | null };
 
 export default function SettingsPage({ nav, can, settings: initialSettings, endpoints }: SettingsPageProps) {
@@ -84,13 +87,28 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
     const [blueskyCheck, setBlueskyCheck] = useState<CheckState>({ running: false, result: null });
     const [mastodonCheck, setMastodonCheck] = useState<CheckState>({ running: false, result: null });
 
+    // Bumped by every save, so a connection check that started before the
+    // save can't show its (now stale) result after it.
+    const saveGeneration = useRef(0);
+
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
         setForm((current) => ({ ...current, [key]: value }));
         setDirty(true);
     }
 
+    /**
+     * Tick or untick a secret's Remove box. Ticking clears anything typed
+     * into the secret, which is disabled while it stays ticked, so a save
+     * never sends a replacement together with its removal.
+     */
+    function toggleRemove(removeKey: SecretRemoveKey, secretKey: SecretKey, removing: boolean) {
+        setForm((current) => ({ ...current, [removeKey]: removing, ...(removing ? { [secretKey]: '' } : {}) }));
+        setDirty(true);
+    }
+
     async function save(event: FormEvent) {
         event.preventDefault();
+        saveGeneration.current += 1;
         setSaving(true);
         setNotice(null);
         setErrors({});
@@ -104,6 +122,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                 }),
             });
 
+            saveGeneration.current += 1;
             setSettings(response.settings);
             setForm(formFrom(response.settings));
             setDirty(false);
@@ -123,15 +142,20 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
     }
 
     async function runCheck(url: string, setState: (state: CheckState) => void) {
+        const generation = saveGeneration.current;
         setState({ running: true, result: null });
 
+        let result: ConnectionCheck;
+
         try {
-            setState({ running: false, result: await apiFetch<ConnectionCheck>(url, { method: 'POST' }) });
+            result = await apiFetch<ConnectionCheck>(url, { method: 'POST' });
         } catch (error) {
-            setState({
-                running: false,
-                result: { ok: false, message: error instanceof Error ? error.message : 'The check failed.', details: [] },
-            });
+            result = { ok: false, message: error instanceof Error ? error.message : 'The check failed.', details: [] };
+        }
+
+        // A save since the check started has already cleared this card.
+        if (generation === saveGeneration.current) {
+            setState({ running: false, result });
         }
     }
 
@@ -165,12 +189,13 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                             stored={settings.hasDocsApiToken}
                             removing={form.remove_docs_api_token}
                             error={errors.docs_api_token}
-                            onRemove={(removing) => update('remove_docs_api_token', removing)}
+                            onRemove={(removing) => toggleRemove('remove_docs_api_token', 'docs_api_token', removing)}
                         >
                             <input
                                 type="password"
                                 autoComplete="off"
                                 className={INPUT_CLASS}
+                                disabled={form.remove_docs_api_token}
                                 value={form.docs_api_token}
                                 placeholder={settings.hasDocsApiToken ? 'Saved — leave blank to keep' : ''}
                                 onChange={(event) => update('docs_api_token', event.target.value)}
@@ -234,7 +259,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                                 stored={settings.hasGitHubPrivateKey}
                                 removing={form.remove_github_private_key}
                                 error={errors.github_private_key}
-                                onRemove={(removing) => update('remove_github_private_key', removing)}
+                                onRemove={(removing) => toggleRemove('remove_github_private_key', 'github_private_key', removing)}
                                 hint="Paste the whole .pem file GitHub generated for the App."
                             >
                                 <textarea
@@ -242,6 +267,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                                     autoComplete="off"
                                     spellCheck={false}
                                     className={TEXTAREA_CLASS}
+                                    disabled={form.remove_github_private_key}
                                     value={form.github_private_key}
                                     placeholder={settings.hasGitHubPrivateKey ? 'Saved — leave blank to keep' : '-----BEGIN RSA PRIVATE KEY-----'}
                                     onChange={(event) => update('github_private_key', event.target.value)}
@@ -277,13 +303,14 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                             stored={settings.hasWebhookSecret}
                             removing={form.remove_github_webhook_secret}
                             error={errors.github_webhook_secret}
-                            onRemove={(removing) => update('remove_github_webhook_secret', removing)}
+                            onRemove={(removing) => toggleRemove('remove_github_webhook_secret', 'github_webhook_secret', removing)}
                             hint="At least 20 characters, e.g. the output of openssl rand -hex 32. A GitHub App webhook must use the same secret."
                         >
                             <input
                                 type="password"
                                 autoComplete="off"
                                 className={INPUT_CLASS}
+                                disabled={form.remove_github_webhook_secret}
                                 value={form.github_webhook_secret}
                                 placeholder={settings.hasWebhookSecret ? 'Saved — leave blank to keep' : ''}
                                 onChange={(event) => update('github_webhook_secret', event.target.value)}
@@ -320,13 +347,14 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                             stored={settings.hasBlueskyAppPassword}
                             removing={form.remove_bluesky_app_password}
                             error={errors.bluesky_app_password}
-                            onRemove={(removing) => update('remove_bluesky_app_password', removing)}
+                            onRemove={(removing) => toggleRemove('remove_bluesky_app_password', 'bluesky_app_password', removing)}
                             hint="Create one under Settings → Privacy and security → App passwords. Never the account password."
                         >
                             <input
                                 type="password"
                                 autoComplete="off"
                                 className={INPUT_CLASS}
+                                disabled={form.remove_bluesky_app_password}
                                 value={form.bluesky_app_password}
                                 placeholder={settings.hasBlueskyAppPassword ? 'Saved — leave blank to keep' : ''}
                                 onChange={(event) => update('bluesky_app_password', event.target.value)}
@@ -356,13 +384,14 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                             stored={settings.hasMastodonAccessToken}
                             removing={form.remove_mastodon_access_token}
                             error={errors.mastodon_access_token}
-                            onRemove={(removing) => update('remove_mastodon_access_token', removing)}
+                            onRemove={(removing) => toggleRemove('remove_mastodon_access_token', 'mastodon_access_token', removing)}
                             hint="From Preferences → Development → New application, with the write:statuses and read:accounts scopes."
                         >
                             <input
                                 type="password"
                                 autoComplete="off"
                                 className={INPUT_CLASS}
+                                disabled={form.remove_mastodon_access_token}
                                 value={form.mastodon_access_token}
                                 placeholder={settings.hasMastodonAccessToken ? 'Saved — leave blank to keep' : ''}
                                 onChange={(event) => update('mastodon_access_token', event.target.value)}

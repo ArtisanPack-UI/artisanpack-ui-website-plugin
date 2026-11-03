@@ -260,6 +260,21 @@ describe('webhook', function (): void {
         Queue::assertPushed(PostReleaseAnnouncement::class, 2);
     });
 
+    it('queues every network before rethrowing a dispatch failure', function (): void {
+        configureAnnouncements();
+        $dispatcher = app(Illuminate\Contracts\Bus\Dispatcher::class);
+        $failing    = Mockery::mock(Illuminate\Contracts\Bus\Dispatcher::class);
+        $failing->shouldReceive('dispatch')->once()->ordered()->andThrow(new RuntimeException('bluesky job failed'));
+        $failing->shouldReceive('dispatch')->once()->ordered()->with(Mockery::on(
+            fn (PostReleaseAnnouncement $job): bool => SocialNetwork::Mastodon === $job->network,
+        ));
+        app()->instance(Illuminate\Contracts\Bus\Dispatcher::class, $failing);
+
+        deliver(releasePayload())->assertServerError();
+
+        app()->instance(Illuminate\Contracts\Bus\Dispatcher::class, $dispatcher);
+    });
+
     it('announces a prerelease once it is promoted to a release', function (): void {
         configureAnnouncements();
 
@@ -309,6 +324,17 @@ describe('announcement text', function (): void {
         expect(grapheme_strlen($long->text()))->toBeLessThanOrEqual(ReleaseAnnouncement::POST_LIMIT)
             ->and($long->text())->not->toContain('A meaningful title')
             ->and(seoAnnouncement('A meaningful title')->text())->toContain('A meaningful title');
+    });
+
+    it('shortens a very long repository name to keep the post within the limit', function (): void {
+        $repository = str_repeat('r', 100);
+        $tag        = 'v1.0.0-' . str_repeat('b', 40);
+        $url        = 'https://github.com/ArtisanPack-UI/' . $repository . '/releases/tag/' . $tag;
+        $text       = (new ReleaseAnnouncement(1, $repository, $tag, 'Title', $url))->text();
+
+        expect(grapheme_strlen($text))->toBeLessThanOrEqual(ReleaseAnnouncement::POST_LIMIT)
+            ->and($text)->toEndWith("\n\n" . $url)
+            ->and($text)->toContain('…');
     });
 
     it('derives a stable, valid Bluesky record key from the release', function (): void {
@@ -450,6 +476,23 @@ describe('posting', function (): void {
         Http::assertSentCount(1);
         expect(Cache::has(PostReleaseAnnouncement::postedKey(SocialNetwork::Bluesky, 4242)))->toBeFalse();
     });
+
+    it('waits for the rate limit to reset instead of failing', function (array $headers, int $delay): void {
+        configureAnnouncements();
+        Http::fake(['mastodon.example/*' => Http::response(['error' => 'Too many requests'], 429, $headers)]);
+
+        $job = (new PostReleaseAnnouncement(SocialNetwork::Mastodon, seoAnnouncement()))->withFakeQueueInteractions();
+        app()->call([$job, 'handle']);
+
+        $job->assertReleased($delay);
+        $job->assertNotFailed();
+    })->with([
+        'Retry-After'          => [['Retry-After' => '120'], 120],
+        'Bluesky-style reset'  => [fn () => ['RateLimit-Reset' => (string) (time() + 600)], 600],
+        'soon, waits a minute' => [['Retry-After' => '5'], 60],
+        'far, waits an hour'   => [['Retry-After' => '86400'], 3600],
+        'no reset given'       => [[], 300],
+    ]);
 
     it('rethrows a temporary failure so the job retries', function (): void {
         configureAnnouncements();
