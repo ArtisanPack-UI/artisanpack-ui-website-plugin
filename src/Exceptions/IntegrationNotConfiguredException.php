@@ -24,6 +24,22 @@ final class IntegrationNotConfiguredException extends RuntimeException
         return new self(__('The GitHub App isn\'t configured yet. Add its App ID, private key and installation ID in ArtisanPack UI settings.'));
     }
 
+    /**
+     * @since 1.4.0
+     */
+    public static function bluesky(): self
+    {
+        return new self(__('Bluesky isn\'t configured yet. Add the account\'s handle and an app password in ArtisanPack UI settings.'));
+    }
+
+    /**
+     * @since 1.4.0
+     */
+    public static function mastodon(): self
+    {
+        return new self(__('Mastodon isn\'t configured yet. Add the instance URL and an access token in ArtisanPack UI settings.'));
+    }
+
     public static function gitHubProject(): self
     {
         return new self(__('The org GitHub Project isn\'t configured yet. Add its project number in ArtisanPack UI settings.'));

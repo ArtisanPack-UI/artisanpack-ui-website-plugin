@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Release announcements on Bluesky and Mastodon.** A new public
+  `artisanpack-ui.webhooks.github` endpoint
+  (`/plugins/artisanpack-ui/webhooks/github`) takes GitHub `release`
+  webhook deliveries, checks their `X-Hub-Signature-256` signature against
+  a secret saved in Settings, and posts each newly released, final release
+  of a public repository in the org (including a prerelease once it's
+  promoted) to the configured Bluesky and Mastodon accounts. Drafts,
+  prereleases, private repositories, releases published more than a day
+  earlier, tags that aren't versions and an editable list of excluded
+  repositories (the website theme and plugin by default) are skipped.
+  Mentions, hashtags and links in a release title are defused before
+  posting. Each network posts from its own queued job, so a failure on one
+  never re-posts to the other. A release is posted at most once per network,
+  even across redeliveries and retries: Mastodon posts carry an idempotency
+  key, and Bluesky posts use a record key derived from the release. Settings gains a "Release announcements" section
+  with the webhook URL and secret, the Bluesky handle and app password, and
+  the Mastodon instance URL and access token. The Bluesky and Mastodon
+  settings each have a connection check that signs in without posting.
+
 ## [1.3.0] - 2026-10-27
 
 ### Changed

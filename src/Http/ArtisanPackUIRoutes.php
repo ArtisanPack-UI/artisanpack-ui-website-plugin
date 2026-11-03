@@ -7,6 +7,7 @@ namespace ArtisanPackUI\Site\Http;
 use ArtisanPackUI\Site\ArtisanPackUIServiceProvider;
 use ArtisanPackUI\Site\Http\Controllers\BoardController;
 use ArtisanPackUI\Site\Http\Controllers\DashboardWidgetController;
+use ArtisanPackUI\Site\Http\Controllers\GitHubWebhookController;
 use ArtisanPackUI\Site\Http\Controllers\IconController;
 use ArtisanPackUI\Site\Http\Controllers\IssueController;
 use ArtisanPackUI\Site\Http\Controllers\PackageDocsController;
@@ -25,8 +26,10 @@ use Illuminate\Support\Facades\Route;
  * instead of redeclaring the routes. A route registered without its
  * permission gate therefore fails a test rather than shipping.
  *
- * Every route sits behind the host's admin stack plus a
- * `permission:{slug}` gate from {@see Permissions}. The admin *pages* are
+ * Every admin route sits behind the host's admin stack plus a
+ * `permission:{slug}` gate from {@see Permissions}. The one exception is the
+ * GitHub webhook, which is public and authenticated by its signature
+ * instead (see {@see GitHubWebhookController}). The admin *pages* are
  * routed by Keystone's `AdminMenuManager` instead (see
  * {@see \ArtisanPackUI\Site\Support\AdminPages}).
  *
@@ -112,6 +115,26 @@ final class ArtisanPackUIRoutes
     public const WIDGET_LIMIT = 300;
 
     /**
+     * Requests per minute, per address, to the GitHub webhook. GitHub sends
+     * one delivery per event, and only a release does any work.
+     */
+    public const WEBHOOK_LIMIT = 120;
+
+    /**
+     * Routes that are public on purpose, each authenticated some other way.
+     * The suite checks that every other route carries a permission gate.
+     *
+     * @var list<string>
+     */
+    public const PUBLIC_ROUTES = ['artisanpack-ui.webhooks.github'];
+
+    /**
+     * The GitHub webhook's path, outside `admin/` so none of the host's
+     * admin middleware applies.
+     */
+    public const WEBHOOK_PATH = 'plugins/artisanpack-ui/webhooks/github';
+
+    /**
      * The `{package}` placeholder in the per-package endpoint templates
      * shared with the Edit Package screen, which the bundle swaps for the
      * record's id.
@@ -146,6 +169,10 @@ final class ArtisanPackUIRoutes
      */
     public static function register(array $adminMiddleware = self::ADMIN_MIDDLEWARE): void
     {
+        Route::name('artisanpack-ui.webhooks.github')
+            ->middleware('throttle:' . self::WEBHOOK_LIMIT . ',1,artisanpack-ui-webhooks')
+            ->post(self::WEBHOOK_PATH, GitHubWebhookController::class);
+
         Route::middleware($adminMiddleware)
             ->prefix('admin/artisanpack-ui')
             ->name('artisanpack-ui.')
@@ -156,6 +183,8 @@ final class ArtisanPackUIRoutes
                     Route::middleware('throttle:' . self::CONNECTION_TEST_LIMIT . ',1')->group(function (): void {
                         Route::name('settings.test-docs')->post('settings/test/docs', [SettingsController::class, 'testDocs']);
                         Route::name('settings.test-github')->post('settings/test/github', [SettingsController::class, 'testGitHub']);
+                        Route::name('settings.test-bluesky')->post('settings/test/bluesky', [SettingsController::class, 'testBluesky']);
+                        Route::name('settings.test-mastodon')->post('settings/test/mastodon', [SettingsController::class, 'testMastodon']);
                     });
                 });
 

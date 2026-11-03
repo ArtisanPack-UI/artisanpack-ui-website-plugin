@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Support\Permissions;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Route as RouteFacade;
@@ -21,7 +22,8 @@ it('declares every permission in plugin.json', function (): void {
 it('gates every plugin JSON route on a plugin permission', function (): void {
     $routes = array_filter(
         RouteFacade::getRoutes()->getRoutes(),
-        fn (Route $route): bool => str_starts_with((string) $route->getName(), 'artisanpack-ui.'),
+        fn (Route $route): bool => str_starts_with((string) $route->getName(), 'artisanpack-ui.')
+            && ! in_array($route->getName(), ArtisanPackUIRoutes::PUBLIC_ROUTES, true),
     );
 
     expect($routes)->not->toBeEmpty();
@@ -30,6 +32,16 @@ it('gates every plugin JSON route on a plugin permission', function (): void {
         $gates = array_filter($route->gatherMiddleware(), fn (string $middleware): bool => str_starts_with($middleware, 'permission:artisanpack-ui.'));
 
         expect($gates)->not->toBeEmpty("Route {$route->getName()} has no plugin permission gate.");
+    }
+});
+
+it('keeps the public routes out of the admin stack', function (): void {
+    foreach (ArtisanPackUIRoutes::PUBLIC_ROUTES as $name) {
+        $route = RouteFacade::getRoutes()->getByName($name);
+
+        expect($route)->not->toBeNull()
+            ->and($route->gatherMiddleware())->not->toContain('web')->not->toContain('auth')
+            ->and($route->uri())->not->toStartWith('admin');
     }
 });
 

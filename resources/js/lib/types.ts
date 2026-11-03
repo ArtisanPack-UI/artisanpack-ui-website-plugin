@@ -43,6 +43,12 @@ export interface IntegrationSettings {
     hasGitHubPrivateKey: boolean;
     githubOrganization: string;
     githubProjectNumber: number | null;
+    hasWebhookSecret: boolean;
+    blueskyHandle: string | null;
+    hasBlueskyAppPassword: boolean;
+    mastodonInstanceUrl: string | null;
+    hasMastodonAccessToken: boolean;
+    excludedRepositories: string[];
 }
 
 /**
@@ -60,6 +66,9 @@ export interface SettingsPageProps extends PluginPageProps {
         update: string;
         testDocs: string;
         testGitHub: string;
+        testBluesky: string;
+        testMastodon: string;
+        webhook: string;
     };
 }
 

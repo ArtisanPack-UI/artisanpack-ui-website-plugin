@@ -2,17 +2,20 @@
  * Settings — federated remote `artisanpack-ui`, exposed as `./settings`,
  * resolved by the host at `plugins/artisanpack-ui/settings`.
  *
- * Connection details for the docs site API and the GitHub App installed on
- * the ArtisanPack-UI org, plus a "Test connection" check for each. Saving
+ * Connection details for the docs site API, the GitHub App installed on the
+ * ArtisanPack-UI org, and release announcements (the GitHub webhook plus the
+ * Bluesky and Mastodon accounts), with a "Test connection" check for each
+ * service. Saving
  * and testing go through the plugin's JSON endpoints; the checks run
  * against the *saved* settings, so a test after editing asks to save first.
  *
- * The docs API token and the App private key are write-only: the server
+ * Every secret (API token, private key, webhook secret, app password,
+ * access token) is write-only: the server
  * only says whether one is stored. Leaving the field blank keeps it, and
  * "Remove" clears it on the next save.
  */
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import { CARD_CLASS, PluginPage } from '../components/ui';
 import { ApiError, apiFetch } from '../lib/http';
@@ -33,6 +36,15 @@ interface FormState {
     remove_github_private_key: boolean;
     github_organization: string;
     github_project_number: string;
+    github_webhook_secret: string;
+    remove_github_webhook_secret: boolean;
+    bluesky_handle: string;
+    bluesky_app_password: string;
+    remove_bluesky_app_password: boolean;
+    mastodon_instance_url: string;
+    mastodon_access_token: string;
+    remove_mastodon_access_token: boolean;
+    announcement_excluded_repositories: string;
 }
 
 function formFrom(settings: IntegrationSettings): FormState {
@@ -46,8 +58,20 @@ function formFrom(settings: IntegrationSettings): FormState {
         remove_github_private_key: false,
         github_organization: settings.githubOrganization,
         github_project_number: settings.githubProjectNumber === null ? '' : String(settings.githubProjectNumber),
+        github_webhook_secret: '',
+        remove_github_webhook_secret: false,
+        bluesky_handle: settings.blueskyHandle ?? '',
+        bluesky_app_password: '',
+        remove_bluesky_app_password: false,
+        mastodon_instance_url: settings.mastodonInstanceUrl ?? '',
+        mastodon_access_token: '',
+        remove_mastodon_access_token: false,
+        announcement_excluded_repositories: settings.excludedRepositories.join('\n'),
     };
 }
+
+type SecretKey = 'docs_api_token' | 'github_private_key' | 'github_webhook_secret' | 'bluesky_app_password' | 'mastodon_access_token';
+type SecretRemoveKey = `remove_${SecretKey}`;
 
 type CheckState = { running: boolean; result: ConnectionCheck | null };
 
@@ -60,14 +84,31 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [docsCheck, setDocsCheck] = useState<CheckState>({ running: false, result: null });
     const [gitHubCheck, setGitHubCheck] = useState<CheckState>({ running: false, result: null });
+    const [blueskyCheck, setBlueskyCheck] = useState<CheckState>({ running: false, result: null });
+    const [mastodonCheck, setMastodonCheck] = useState<CheckState>({ running: false, result: null });
+
+    // Bumped by every save, so a connection check that started before the
+    // save can't show its (now stale) result after it.
+    const saveGeneration = useRef(0);
 
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
         setForm((current) => ({ ...current, [key]: value }));
         setDirty(true);
     }
 
+    /**
+     * Tick or untick a secret's Remove box. Ticking clears anything typed
+     * into the secret, which is disabled while it stays ticked, so a save
+     * never sends a replacement together with its removal.
+     */
+    function toggleRemove(removeKey: SecretRemoveKey, secretKey: SecretKey, removing: boolean) {
+        setForm((current) => ({ ...current, [removeKey]: removing, ...(removing ? { [secretKey]: '' } : {}) }));
+        setDirty(true);
+    }
+
     async function save(event: FormEvent) {
         event.preventDefault();
+        saveGeneration.current += 1;
         setSaving(true);
         setNotice(null);
         setErrors({});
@@ -81,11 +122,14 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                 }),
             });
 
+            saveGeneration.current += 1;
             setSettings(response.settings);
             setForm(formFrom(response.settings));
             setDirty(false);
             setDocsCheck({ running: false, result: null });
             setGitHubCheck({ running: false, result: null });
+            setBlueskyCheck({ running: false, result: null });
+            setMastodonCheck({ running: false, result: null });
             setNotice({ ok: true, message: response.message });
         } catch (error) {
             if (error instanceof ApiError) {
@@ -98,15 +142,20 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
     }
 
     async function runCheck(url: string, setState: (state: CheckState) => void) {
+        const generation = saveGeneration.current;
         setState({ running: true, result: null });
 
+        let result: ConnectionCheck;
+
         try {
-            setState({ running: false, result: await apiFetch<ConnectionCheck>(url, { method: 'POST' }) });
+            result = await apiFetch<ConnectionCheck>(url, { method: 'POST' });
         } catch (error) {
-            setState({
-                running: false,
-                result: { ok: false, message: error instanceof Error ? error.message : 'The check failed.', details: [] },
-            });
+            result = { ok: false, message: error instanceof Error ? error.message : 'The check failed.', details: [] };
+        }
+
+        // A save since the check started has already cleared this card.
+        if (generation === saveGeneration.current) {
+            setState({ running: false, result });
         }
     }
 
@@ -116,7 +165,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
             can={can}
             active="settings"
             title="ArtisanPack UI settings"
-            description="Connections to the docs site and the ArtisanPack-UI GitHub App."
+            description="Connections to the docs site, the ArtisanPack-UI GitHub App, and the accounts that announce releases."
         >
             <form onSubmit={save} className="space-y-6">
                 <section className={CARD_CLASS}>
@@ -140,12 +189,13 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                             stored={settings.hasDocsApiToken}
                             removing={form.remove_docs_api_token}
                             error={errors.docs_api_token}
-                            onRemove={(removing) => update('remove_docs_api_token', removing)}
+                            onRemove={(removing) => toggleRemove('remove_docs_api_token', 'docs_api_token', removing)}
                         >
                             <input
                                 type="password"
                                 autoComplete="off"
                                 className={INPUT_CLASS}
+                                disabled={form.remove_docs_api_token}
                                 value={form.docs_api_token}
                                 placeholder={settings.hasDocsApiToken ? 'Saved — leave blank to keep' : ''}
                                 onChange={(event) => update('docs_api_token', event.target.value)}
@@ -209,7 +259,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                                 stored={settings.hasGitHubPrivateKey}
                                 removing={form.remove_github_private_key}
                                 error={errors.github_private_key}
-                                onRemove={(removing) => update('remove_github_private_key', removing)}
+                                onRemove={(removing) => toggleRemove('remove_github_private_key', 'github_private_key', removing)}
                                 hint="Paste the whole .pem file GitHub generated for the App."
                             >
                                 <textarea
@@ -217,6 +267,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                                     autoComplete="off"
                                     spellCheck={false}
                                     className={TEXTAREA_CLASS}
+                                    disabled={form.remove_github_private_key}
                                     value={form.github_private_key}
                                     placeholder={settings.hasGitHubPrivateKey ? 'Saved — leave blank to keep' : '-----BEGIN RSA PRIVATE KEY-----'}
                                     onChange={(event) => update('github_private_key', event.target.value)}
@@ -230,6 +281,129 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                         state={gitHubCheck}
                         dirty={dirty}
                         onRun={() => runCheck(endpoints.testGitHub, setGitHubCheck)}
+                    />
+                </section>
+
+                <section className={CARD_CLASS}>
+                    <h2 className="text-base font-semibold text-base-content">Release announcements</h2>
+                    <p className="mt-1 text-sm text-base-content/60">
+                        Posts each new release of a public ArtisanPack-UI repository to Bluesky and Mastodon. Add an
+                        org webhook on GitHub pointing at the URL below, with content type <code>application/json</code>,
+                        the same secret, and the <strong>Releases</strong> event. Drafts, prereleases, private
+                        repositories and the excluded repositories are never posted; a prerelease is posted once it's
+                        promoted to a release.
+                    </p>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <Field label="Webhook URL" hint="Paste this into the org webhook's Payload URL.">
+                            <input readOnly className={INPUT_CLASS} value={endpoints.webhook} onFocus={(event) => event.target.select()} />
+                        </Field>
+                        <SecretField
+                            label="Webhook secret"
+                            stored={settings.hasWebhookSecret}
+                            removing={form.remove_github_webhook_secret}
+                            error={errors.github_webhook_secret}
+                            onRemove={(removing) => toggleRemove('remove_github_webhook_secret', 'github_webhook_secret', removing)}
+                            hint="At least 20 characters, e.g. the output of openssl rand -hex 32. A GitHub App webhook must use the same secret."
+                        >
+                            <input
+                                type="password"
+                                autoComplete="off"
+                                className={INPUT_CLASS}
+                                disabled={form.remove_github_webhook_secret}
+                                value={form.github_webhook_secret}
+                                placeholder={settings.hasWebhookSecret ? 'Saved — leave blank to keep' : ''}
+                                onChange={(event) => update('github_webhook_secret', event.target.value)}
+                            />
+                        </SecretField>
+                        <div className="md:col-span-2">
+                            <Field
+                                label="Excluded repositories"
+                                error={errors.announcement_excluded_repositories}
+                                hint="One repository name per line. Releases from these are never announced."
+                            >
+                                <textarea
+                                    rows={3}
+                                    spellCheck={false}
+                                    className={TEXTAREA_CLASS}
+                                    value={form.announcement_excluded_repositories}
+                                    onChange={(event) => update('announcement_excluded_repositories', event.target.value)}
+                                />
+                            </Field>
+                        </div>
+                    </div>
+
+                    <h3 className="mt-6 text-sm font-semibold text-base-content">Bluesky</h3>
+                    <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <Field label="Handle" error={errors.bluesky_handle} hint="e.g. artisanpackui.bsky.social">
+                            <input
+                                className={INPUT_CLASS}
+                                value={form.bluesky_handle}
+                                onChange={(event) => update('bluesky_handle', event.target.value)}
+                            />
+                        </Field>
+                        <SecretField
+                            label="App password"
+                            stored={settings.hasBlueskyAppPassword}
+                            removing={form.remove_bluesky_app_password}
+                            error={errors.bluesky_app_password}
+                            onRemove={(removing) => toggleRemove('remove_bluesky_app_password', 'bluesky_app_password', removing)}
+                            hint="Create one under Settings → Privacy and security → App passwords. Never the account password."
+                        >
+                            <input
+                                type="password"
+                                autoComplete="off"
+                                className={INPUT_CLASS}
+                                disabled={form.remove_bluesky_app_password}
+                                value={form.bluesky_app_password}
+                                placeholder={settings.hasBlueskyAppPassword ? 'Saved — leave blank to keep' : ''}
+                                onChange={(event) => update('bluesky_app_password', event.target.value)}
+                            />
+                        </SecretField>
+                    </div>
+
+                    <ConnectionTest
+                        label="Test Bluesky connection"
+                        state={blueskyCheck}
+                        dirty={dirty}
+                        onRun={() => runCheck(endpoints.testBluesky, setBlueskyCheck)}
+                    />
+
+                    <h3 className="mt-6 text-sm font-semibold text-base-content">Mastodon</h3>
+                    <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <Field label="Instance URL" error={errors.mastodon_instance_url} hint="e.g. https://phpc.social">
+                            <input
+                                type="url"
+                                className={INPUT_CLASS}
+                                value={form.mastodon_instance_url}
+                                onChange={(event) => update('mastodon_instance_url', event.target.value)}
+                            />
+                        </Field>
+                        <SecretField
+                            label="Access token"
+                            stored={settings.hasMastodonAccessToken}
+                            removing={form.remove_mastodon_access_token}
+                            error={errors.mastodon_access_token}
+                            onRemove={(removing) => toggleRemove('remove_mastodon_access_token', 'mastodon_access_token', removing)}
+                            hint="From Preferences → Development → New application, with the write:statuses and read:accounts scopes."
+                        >
+                            <input
+                                type="password"
+                                autoComplete="off"
+                                className={INPUT_CLASS}
+                                disabled={form.remove_mastodon_access_token}
+                                value={form.mastodon_access_token}
+                                placeholder={settings.hasMastodonAccessToken ? 'Saved — leave blank to keep' : ''}
+                                onChange={(event) => update('mastodon_access_token', event.target.value)}
+                            />
+                        </SecretField>
+                    </div>
+
+                    <ConnectionTest
+                        label="Test Mastodon connection"
+                        state={mastodonCheck}
+                        dirty={dirty}
+                        onRun={() => runCheck(endpoints.testMastodon, setMastodonCheck)}
                     />
                 </section>
 

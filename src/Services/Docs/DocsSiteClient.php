@@ -233,30 +233,9 @@ class DocsSiteClient
             ->connectTimeout(5)
             ->timeout(20);
 
-        $pin = self::resolvePin($baseUrl, $ips);
+        $pin = OutboundUrlPolicy::curlResolvePin($baseUrl, $ips);
 
         return null === $pin ? $request : $request->withOptions(['curl' => [CURLOPT_RESOLVE => [$pin]]]);
-    }
-
-    /**
-     * The `CURLOPT_RESOLVE` entry pinning the base URL's host to the first
-     * vetted address, or null when there is nothing to pin (local
-     * development, or a host that is already an IP).
-     *
-     * @param  list<string>  $ips
-     */
-    private static function resolvePin(string $baseUrl, array $ips): ?string
-    {
-        $host = trim((string) parse_url($baseUrl, PHP_URL_HOST), '[]');
-
-        if ([] === $ips || '' === $host || false !== filter_var($host, FILTER_VALIDATE_IP)) {
-            return null;
-        }
-
-        $port = parse_url($baseUrl, PHP_URL_PORT) ?? ('https' === strtolower((string) parse_url($baseUrl, PHP_URL_SCHEME)) ? 443 : 80);
-        $ip   = str_contains($ips[0], ':') ? '[' . $ips[0] . ']' : $ips[0];
-
-        return "{$host}:{$port}:{$ip}";
     }
 
     /**
