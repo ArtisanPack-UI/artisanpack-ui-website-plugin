@@ -211,7 +211,7 @@ final readonly class ReleaseAnnouncement
 
     private function compose(string $summary, ?string $repository = null): string
     {
-        $lines = ['📦 ' . $this->headline($repository)];
+        $lines = [$this->headline($repository)];
 
         if ('' !== $summary) {
             $lines[] = $summary;
