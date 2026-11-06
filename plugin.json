@@ -22,6 +22,7 @@
     },
     "migrations_path": "database/migrations",
     "rollback_migrations_on_delete": true,
+    "uninstall": "ArtisanPackUI\\Site\\Uninstall",
     "permissions": [
         "artisanpack-ui.sync",
         "artisanpack-ui.issues.manage",

@@ -10,6 +10,7 @@ use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Modules\ContentModel\Models\DynamicContentTerm;
 
 /**
@@ -198,6 +199,19 @@ describe('with the package taxonomy on posts', function (): void {
             ->and(DB::table(PackageTermSync::MAP_TABLE)->count())->toBe(0);
     });
 
+    it('frees a deleted package\'s slug before another package claims it', function (): void {
+        $gone = Package::create(['title' => 'Forms', 'slug' => 'forms']);
+        DB::table('packages')->where('id', $gone->getKey())->delete();
+        DB::table('packages')->insert(['title' => 'Form Builder', 'slug' => 'forms', 'status' => 'published']);
+
+        app(PackageTermSync::class)->syncAll();
+        $first = packageTerms();
+        app(PackageTermSync::class)->syncAll();
+
+        expect($first)->toBe(['forms' => 'Form Builder'])
+            ->and(packageTerms())->toBe($first);
+    });
+
     it('follows records Keystone\'s admin creates, updates and deletes', function (): void {
         $id = insertPackageRow('Forms', 'forms');
         doAction('keystone.admin.contentTypes.record.created', 'package', [], $id);
@@ -259,6 +273,18 @@ describe('with the package taxonomy on posts', function (): void {
             ->and(DB::table(PackageTermSync::MAP_TABLE)->count())->toBe(0)
             ->and(DB::table('taxonomies')->pluck('slug')->all())->toBe([PackageContentType::TAG_TAXONOMY])
             ->and(Cache::has(PackageContentType::provisionedMarkerKey()))->toBeFalse();
+    });
+
+    it('still removes the taxonomy and its terms once the plugin\'s map is gone', function (): void {
+        $package = Package::create(['title' => 'Forms', 'slug' => 'forms']);
+        assignPackageTerm(7, packageTermId($package));
+        Schema::drop(PackageTermSync::MAP_TABLE);
+
+        app(PackageTermSync::class)->purge();
+
+        expect(packageTerms())->toBe([])
+            ->and(DB::table('keystone_dynamic_content_term_assignments')->count())->toBe(0)
+            ->and(DB::table('taxonomies')->where('slug', PackageContentType::POST_TAXONOMY)->exists())->toBeFalse();
     });
 });
 

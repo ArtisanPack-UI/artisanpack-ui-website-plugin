@@ -104,8 +104,11 @@ final class PluginBootstrapper
      * custom fields and its own taxonomies stay: they are site content, not
      * plugin state.
      *
-     * Runs from `ap.cmsFramework.plugin.deleting`, which only fires in a
-     * request where the plugin booted, i.e. when it is deleted while active.
+     * Runs from the manifest's {@see \ArtisanPackUI\Site\Uninstall} class,
+     * which Keystone calls whether or not the plugin is active, and from
+     * `ap.cmsFramework.plugin.deleting`, which only fires when it booted.
+     * The second covers an install whose plugin row predates the `uninstall`
+     * key; running twice is harmless.
      *
      * @since 1.0.0
      */

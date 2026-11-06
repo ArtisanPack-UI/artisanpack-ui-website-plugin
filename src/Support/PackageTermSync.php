@@ -61,14 +61,15 @@ final class PackageTermSync
             return;
         }
 
-        foreach (Package::query()->lazyById() as $package) {
-            $this->upsert($package);
-        }
-
+        // Orphans first, so their slugs are free before live packages claim them.
         DB::table(self::MAP_TABLE)
             ->whereNotIn('package_id', Package::query()->select('id')->toBase())
             ->pluck('package_id')
             ->each(fn (mixed $packageId) => $this->remove((int) $packageId));
+
+        foreach (Package::query()->lazyById() as $package) {
+            $this->upsert($package);
+        }
     }
 
     /**
@@ -101,23 +102,29 @@ final class PackageTermSync
      * Remove the `package` taxonomy, all of its terms and their post
      * assignments, and the plugin's map: the clean-up when the plugin is
      * deleted. A `package` taxonomy bound to another type isn't the
-     * plugin's, so it's left alone.
+     * plugin's, so it's left alone. Doesn't need the map, which the plugin's
+     * migration rollback may already have dropped.
      */
     public function purge(): void
     {
-        if (! $this->isReady()) {
+        if (! Schema::hasTable(self::TERMS_TABLE) || ! $this->ownsTaxonomy()) {
             return;
         }
 
-        DB::transaction(static function (): void {
+        $hasMap = Schema::hasTable(self::MAP_TABLE);
+
+        DB::transaction(static function () use ($hasMap): void {
             $termIds = DB::table(self::TERMS_TABLE)
                 ->where('taxonomy_slug', PackageContentType::POST_TAXONOMY)
                 ->pluck('id');
 
             DB::table(self::ASSIGNMENTS_TABLE)->whereIn('term_id', $termIds)->delete();
             DB::table(self::TERMS_TABLE)->whereIn('id', $termIds)->delete();
-            DB::table(self::MAP_TABLE)->delete();
             DB::table('taxonomies')->where('slug', PackageContentType::POST_TAXONOMY)->delete();
+
+            if ($hasMap) {
+                DB::table(self::MAP_TABLE)->delete();
+            }
         });
     }
 
@@ -138,12 +145,22 @@ final class PackageTermSync
     }
 
     /**
-     * Whether the host's term tables and the plugin's map exist, and the
-     * `package` taxonomy is bound to blog posts.
+     * Whether terms can be synced: the host's term tables and the plugin's
+     * map exist, and the `package` taxonomy is bound to blog posts.
      */
-    private function isReady(): bool
+    public function isReady(): bool
     {
-        if (! Schema::hasTable(self::MAP_TABLE) || ! Schema::hasTable(self::TERMS_TABLE) || ! Schema::hasTable('taxonomies')) {
+        return Schema::hasTable(self::MAP_TABLE)
+            && Schema::hasTable(self::TERMS_TABLE)
+            && $this->ownsTaxonomy();
+    }
+
+    /**
+     * Whether the `package` taxonomy exists bound to blog posts.
+     */
+    private function ownsTaxonomy(): bool
+    {
+        if (! Schema::hasTable('taxonomies')) {
             return false;
         }
 
