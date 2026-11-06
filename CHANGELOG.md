@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-05
+
 ### Added
 
 - **A Packages taxonomy on blog posts.** The plugin provisions a `package`
@@ -18,11 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Renaming a package renames its term in place, so tagged posts stay tagged
   and Keystone redirects the old archive URL. Deleting the plugin removes the
   taxonomy, its terms and their assignments (#49).
+- **An uninstall class.** `plugin.json` now declares `uninstall`, so deleting
+  the plugin clears its stored credentials, cached token, mirrored icons and
+  the Packages taxonomy even when it was deactivated first. Before, that
+  clean-up only ran when the plugin was deleted while active (#57).
 
 ### Changed
 
 - Requires Keystone 0.19.0 (cms-framework 2.18), the first release with
   custom taxonomies on blog posts.
+
+### Upgrading
+
+- Run the plugin's migrations after updating. They add the
+  `artisanpack_ui_package_terms` table, and the next request provisions the
+  taxonomy and a term for every package.
 
 ## [1.4.1] - 2026-11-03
 
