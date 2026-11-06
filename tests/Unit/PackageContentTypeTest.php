@@ -8,12 +8,22 @@ it('turns on the SEO panels for packages', function (): void {
     expect(PackageContentType::SUPPORTS)->toContain('seo');
 });
 
-it('binds a hierarchical category and a flat tag taxonomy', function (): void {
+it('binds a hierarchical category and a flat tag taxonomy to packages', function (): void {
     $taxonomies = collect(PackageContentType::taxonomies())->keyBy('slug');
 
-    expect($taxonomies->keys()->all())->toBe([PackageContentType::CATEGORY_TAXONOMY, PackageContentType::TAG_TAXONOMY])
+    expect($taxonomies->keys()->all())->toBe([PackageContentType::CATEGORY_TAXONOMY, PackageContentType::TAG_TAXONOMY, PackageContentType::POST_TAXONOMY])
         ->and($taxonomies[PackageContentType::CATEGORY_TAXONOMY]['hierarchical'])->toBeTrue()
-        ->and($taxonomies[PackageContentType::TAG_TAXONOMY]['hierarchical'])->toBeFalse();
+        ->and($taxonomies[PackageContentType::CATEGORY_TAXONOMY]['content_type_slug'])->toBe('package')
+        ->and($taxonomies[PackageContentType::TAG_TAXONOMY]['hierarchical'])->toBeFalse()
+        ->and($taxonomies[PackageContentType::TAG_TAXONOMY]['content_type_slug'])->toBe('package');
+});
+
+it('binds a flat Packages taxonomy to blog posts', function (): void {
+    $packages = collect(PackageContentType::taxonomies())->firstWhere('slug', PackageContentType::POST_TAXONOMY);
+
+    expect($packages['name'])->toBe('Packages')
+        ->and($packages['hierarchical'])->toBeFalse()
+        ->and($packages['content_type_slug'])->toBe('posts');
 });
 
 it('uses taxonomy slugs Keystone accepts', function (): void {
@@ -29,8 +39,8 @@ it('lists only the supports flags still to add', function (): void {
 
 it('lists only the taxonomies still to create', function (): void {
     expect(array_column(PackageContentType::missingTaxonomies([PackageContentType::CATEGORY_TAXONOMY]), 'slug'))
-        ->toBe([PackageContentType::TAG_TAXONOMY])
-        ->and(PackageContentType::missingTaxonomies([PackageContentType::CATEGORY_TAXONOMY, PackageContentType::TAG_TAXONOMY]))->toBe([]);
+        ->toBe([PackageContentType::TAG_TAXONOMY, PackageContentType::POST_TAXONOMY])
+        ->and(PackageContentType::missingTaxonomies([PackageContentType::CATEGORY_TAXONOMY, PackageContentType::TAG_TAXONOMY, PackageContentType::POST_TAXONOMY]))->toBe([]);
 });
 
 it('flags a package taxonomy slug bound to another content type', function (): void {
@@ -40,4 +50,10 @@ it('flags a package taxonomy slug bound to another content type', function (): v
         'unrelated'                           => 'post',
     ]))->toBe([PackageContentType::CATEGORY_TAXONOMY])
         ->and(PackageContentType::taxonomyCollisions([PackageContentType::TAG_TAXONOMY => 'package']))->toBe([]);
+});
+
+it('flags a package taxonomy on posts only when another type holds its slug', function (): void {
+    expect(PackageContentType::taxonomyCollisions([PackageContentType::POST_TAXONOMY => 'package']))->toBe([PackageContentType::POST_TAXONOMY])
+        ->and(PackageContentType::taxonomyCollisions([PackageContentType::POST_TAXONOMY => 'posts']))->toBe([])
+        ->and(PackageContentType::taxonomyCollisions([PackageContentType::POST_TAXONOMY => 'post']))->toBe([]);
 });

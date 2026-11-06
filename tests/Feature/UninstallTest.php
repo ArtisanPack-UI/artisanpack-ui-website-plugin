@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Uninstall;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use Illuminate\Support\Facades\Cache;
 
@@ -42,4 +43,15 @@ it('leaves everything alone when another plugin is deleted', function (): void {
 
     expect(IntegrationSettings::count())->toBe(1)
         ->and(Cache::has($this->tokenKey))->toBeTrue();
+});
+
+it('runs the purge from the manifest\'s uninstall class', function (): void {
+    $manifest = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/plugin.json'), true);
+
+    expect($manifest['uninstall'])->toBe(Uninstall::class);
+
+    app($manifest['uninstall'])(null);
+
+    expect(IntegrationSettings::count())->toBe(0)
+        ->and(Cache::has($this->tokenKey))->toBeFalse();
 });

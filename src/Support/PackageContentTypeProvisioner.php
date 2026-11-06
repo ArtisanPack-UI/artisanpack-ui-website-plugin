@@ -12,15 +12,17 @@ use RuntimeException;
 
 /**
  * Brings an existing `package` content type up to {@see PackageContentType}:
- * adds missing `supports` flags and creates the package taxonomies.
- * Idempotent: safe on every boot.
+ * adds missing `supports` flags, creates the plugin's taxonomies, each bound
+ * to its own content type, and gives every package its term in the blog
+ * post `package` taxonomy ({@see PackageTermSync}). Idempotent: safe on
+ * every boot.
  *
  * The taxonomies are persisted rows rather than filter registrations
  * because Keystone's inline term creation on the edit screen only accepts
- * persisted taxonomies. An existing row with the same slug bound to
- * `package` is left as is, so an admin's renames survive. One bound to
- * another type is a collision: taxonomy slugs are unique, so the package
- * one can't be created, and provisioning fails rather than report done.
+ * persisted taxonomies. An existing row with the same slug bound to the
+ * definition's type is left as is, so an admin's renames survive. One bound
+ * to another type is a collision: taxonomy slugs are unique, so the
+ * plugin's can't be created, and provisioning fails rather than report done.
  *
  * Host glue, so it only runs inside Keystone; the definitions themselves are
  * covered by the plugin's test suite.
@@ -32,6 +34,7 @@ final class PackageContentTypeProvisioner
     public function __construct(
         private readonly ContentTypeManager $contentTypes,
         private readonly TaxonomyManager $taxonomies,
+        private readonly PackageTermSync $terms,
     ) {}
 
     /**
@@ -50,8 +53,9 @@ final class PackageContentTypeProvisioner
     }
 
     /**
-     * @throws RuntimeException When a package taxonomy slug belongs to another
-     *                          content type, after provisioning everything else.
+     * @throws RuntimeException When one of the plugin's taxonomy slugs belongs
+     *                          to another content type, after provisioning
+     *                          everything else.
      */
     public function provision(): void
     {
@@ -74,16 +78,17 @@ final class PackageContentTypeProvisioner
         foreach (PackageContentType::missingTaxonomies(array_keys($owners)) as $taxonomy) {
             $this->taxonomies->createTaxonomy([
                 ...$taxonomy,
-                'content_type_slug' => PackageFields::CONTENT_TYPE,
-                'show_in_admin'     => true,
+                'show_in_admin' => true,
             ]);
         }
 
+        // A no-op while the `package` slug is another type's.
+        $this->terms->syncAll();
+
         if ([] !== $collisions) {
             throw new RuntimeException(sprintf(
-                'Taxonomy "%s" already belongs to another content type, so it can\'t be bound to "%s".',
+                'Taxonomy "%s" already belongs to another content type, so the ArtisanPack UI plugin can\'t provision it.',
                 implode('", "', $collisions),
-                PackageFields::CONTENT_TYPE,
             ));
         }
     }
@@ -102,7 +107,7 @@ final class PackageContentTypeProvisioner
     }
 
     /**
-     * The persisted package taxonomy slugs, each mapped to the content type
+     * The plugin's persisted taxonomy slugs, each mapped to the content type
      * it's bound to.
      *
      * @return array<string, string>
@@ -117,6 +122,8 @@ final class PackageContentTypeProvisioner
     }
 
     /**
+     * The slugs in `$owners` bound where the plugin's definition binds them.
+     *
      * @param  array<string, string>  $owners
      *
      * @return list<string>
@@ -125,7 +132,8 @@ final class PackageContentTypeProvisioner
     {
         return array_keys(array_filter(
             $owners,
-            static fn (string $owner): bool => PackageFields::CONTENT_TYPE === $owner,
+            static fn (string $owner, string $slug): bool => PackageContentType::isOwnBinding($slug, $owner),
+            ARRAY_FILTER_USE_BOTH,
         ));
     }
 }

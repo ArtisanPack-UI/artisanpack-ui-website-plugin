@@ -8,12 +8,15 @@ use ArtisanPackUI\Site\Exceptions\DocsSiteException;
 use ArtisanPackUI\Site\Exceptions\IntegrationNotConfiguredException;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Models\PackageSyncState;
+use ArtisanPackUI\Site\Support\PackageTermSync;
 use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Throwable;
 
 /**
  * Scheduled sync and "Sync now" (roadmap 2.4): runs the import, version and
- * icon steps back to back, then records on each package's
+ * icon steps back to back, brings the packages' blog post terms up to date
+ * ({@see PackageTermSync}), then records on each package's
  * {@see PackageSyncState} when it was checked and what failed, which the
  * edit screen's sync status panel shows.
  *
@@ -30,6 +33,7 @@ final class PackageSyncRunner
         private readonly DocsPackageImporter $importer,
         private readonly PackageVersionSync $versions,
         private readonly PackageIconSync $icons,
+        private readonly PackageTermSync $terms,
     ) {}
 
     /**
@@ -55,6 +59,8 @@ final class PackageSyncRunner
             __('Icons') => fn (): SyncReport => $this->icons->sync(),
         ]);
 
+        $this->syncTerms($run, fn () => $this->terms->syncAll());
+
         foreach (Package::query()->lazyById() as $package) {
             $this->record($package, $run);
         }
@@ -74,6 +80,8 @@ final class PackageSyncRunner
             __('Versions') => fn (): SyncReport => $this->versions->syncOne($package),
             __('Icons')    => fn (): SyncReport => $this->icons->syncOne($package),
         ]);
+
+        $this->syncTerms($run, fn () => $this->terms->syncOne((int) $package->getKey()));
 
         $this->record($package, $run);
 
@@ -103,6 +111,21 @@ final class PackageSyncRunner
         $report->next = null;
 
         return ['report' => $report, 'errors' => $errors];
+    }
+
+    /**
+     * Run a term sync, adding its failure to the run's errors rather than
+     * ending the run.
+     *
+     * @param  array{report: SyncReport, errors: list<string>}  $run
+     */
+    private function syncTerms(array &$run, Closure $sync): void
+    {
+        try {
+            $sync();
+        } catch (Throwable $exception) {
+            $run['errors'][] = __(':step: :message', ['step' => __('Blog post terms'), 'message' => $exception->getMessage()]);
+        }
     }
 
     /**
