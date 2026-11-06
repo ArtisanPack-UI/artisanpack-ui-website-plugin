@@ -29,6 +29,7 @@ use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageContentType;
 use ArtisanPackUI\Site\Support\PackageContentTypeProvisioner;
 use ArtisanPackUI\Site\Support\PackageFieldProvisioner;
+use ArtisanPackUI\Site\Support\PackageTermSync;
 use ArtisanPackUI\Site\Support\Permissions;
 use ArtisanPackUI\Site\Support\PluginBootstrapper;
 use ArtisanPackUI\Site\Widgets\BoardWidget;
@@ -104,6 +105,10 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
      * definition changes the key and provisions again. After resetting the
      * database without clearing the cache, run `php artisan cache:clear`.
      *
+     * The marker waits for the plugin's package → term map: an update boots
+     * the new code before its migrations run, and caching the marker then
+     * would leave the packages without their blog post terms.
+     *
      * Any failure (missing table during install, migration mid-flight, a
      * field key clash) is swallowed so a half-installed DB can't 500 the
      * whole app on boot, backs off for five minutes so a failing database
@@ -125,9 +130,21 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
             $fields      = $this->app->make(PackageFieldProvisioner::class);
             $contentType = $this->app->make(PackageContentTypeProvisioner::class);
 
-            if ($fields->isOutdated() || $contentType->isOutdated()) {
+            $outdated = $fields->isOutdated() || $contentType->isOutdated();
+
+            if ($outdated) {
                 $this->app->make(PackageContentTypeSeeder::class)
                     ->run($this->app->make(ContentTypeManager::class), $fields, $contentType);
+            }
+
+            if (! Schema::hasTable(PackageTermSync::MAP_TABLE)) {
+                return;
+            }
+
+            // The seeder syncs the terms itself; otherwise they may still be
+            // owed from a boot that ran before the map existed.
+            if (! $outdated) {
+                $this->app->make(PackageTermSync::class)->syncAll();
             }
 
             Cache::forever($marker, true);

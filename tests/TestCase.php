@@ -98,6 +98,38 @@ abstract class TestCase extends BaseTestCase
             $table->string('docs_url')->nullable();
             $table->dateTime('last_synced_at')->nullable();
             $table->boolean('sticky')->nullable();
+            $table->string('slug')->nullable();
+        });
+
+        // The host's taxonomy rows and its dynamic term tables, as
+        // cms-framework and Keystone's ContentModel module leave them.
+        Schema::create('taxonomies', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->string('content_type_slug');
+            $table->boolean('hierarchical')->default(false);
+            $table->timestamps();
+        });
+
+        Schema::create('keystone_dynamic_content_terms', function (Blueprint $table): void {
+            $table->id();
+            $table->string('taxonomy_slug')->index();
+            $table->string('name');
+            $table->string('slug');
+            $table->text('description')->nullable();
+            $table->unsignedBigInteger('parent_id')->nullable();
+            $table->timestamps();
+            $table->unique(['taxonomy_slug', 'slug']);
+        });
+
+        Schema::create('keystone_dynamic_content_term_assignments', function (Blueprint $table): void {
+            $table->id();
+            $table->string('content_type_slug');
+            $table->unsignedBigInteger('record_id');
+            $table->foreignId('term_id')->constrained('keystone_dynamic_content_terms')->cascadeOnDelete();
+            $table->timestamps();
+            $table->unique(['content_type_slug', 'record_id', 'term_id']);
         });
 
         $this->loadMigrationsFrom(dirname(__DIR__) . '/database/migrations');

@@ -12,12 +12,14 @@ use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use ArtisanPackUI\VisualEditor\Registries\BlockBindingSourceRegistry;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -29,8 +31,8 @@ use Throwable;
 /**
  * The host-independent parts of {@see ArtisanPackUIServiceProvider}: the
  * container bindings, the Gate ability, the shared Inertia prop, the
- * `apui` icon set, the daily scheduled jobs and the clean-up when the
- * plugin is deleted. The
+ * `apui` icon set, the daily scheduled jobs, the package term sync and the
+ * clean-up when the plugin is deleted. The
  * provider and the test suite both call these, so the suite runs against
  * the same wiring the plugin ships with.
  *
@@ -83,20 +85,24 @@ final class PluginBootstrapper
         self::registerQueryPostType();
         self::registerArchiveOrder();
         self::registerSchedule($app);
+        self::registerPackageTermSync();
         self::registerDeletePurge();
     }
 
     /**
      * Remove what the plugin keeps outside its own tables when Keystone
      * deletes it: the stored credentials (encrypted, but still the docs API
-     * token and the App private key), the cached installation token and
-     * the mirrored `apui` icons.
+     * token and the App private key), the cached installation token, the
+     * mirrored `apui` icons, and the blog post `package` taxonomy with its
+     * terms and their assignments ({@see PackageTermSync::purge()}).
      *
      * The framework's migration rollback is meant to drop the plugin's
      * tables, but `migrate:rollback --path` only reverts the last global
      * batch, so the settings row is cleared here rather than trusting it.
-     * The `package` content type, its records and its custom fields stay:
-     * they are site content, not plugin state.
+     * The provisioned marker is forgotten too, so a reinstall provisions
+     * the taxonomy again. The `package` content type, its records, its
+     * custom fields and its own taxonomies stay: they are site content, not
+     * plugin state.
      *
      * Runs from `ap.cmsFramework.plugin.deleting`, which only fires in a
      * request where the plugin booted, i.e. when it is deleted while active.
@@ -105,13 +111,73 @@ final class PluginBootstrapper
      */
     public static function purgeOnDelete(string $slug): void
     {
-        if (AdminPages::SLUG !== $slug || ! Schema::hasTable('artisanpack_ui_settings')) {
+        if (AdminPages::SLUG !== $slug) {
             return;
         }
 
-        app(GitHubAppClient::class)->forgetInstallationToken();
-        IntegrationSettings::query()->delete();
-        File::deleteDirectory(PackageIconSet::defaultDirectory());
+        // The secrets go first, so a failure further on can't leave them behind.
+        if (Schema::hasTable('artisanpack_ui_settings')) {
+            app(GitHubAppClient::class)->forgetInstallationToken();
+            IntegrationSettings::query()->delete();
+            File::deleteDirectory(PackageIconSet::defaultDirectory());
+        }
+
+        Cache::forget(PackageContentType::provisionedMarkerKey());
+        app(PackageTermSync::class)->purge();
+    }
+
+    /**
+     * Keep each package's blog post term in step with the package
+     * ({@see PackageTermSync}): from the model's own events, which the docs
+     * import and the sync steps save through, and from Keystone's record
+     * actions, because its admin writes records with the query builder and
+     * fires no model events. Only a change to the title or slug touches the
+     * term. A failure is logged, never thrown into the save.
+     */
+    private static function registerPackageTermSync(): void
+    {
+        Package::saved(static function (Package $package): void {
+            if ($package->wasRecentlyCreated || $package->wasChanged(['title', 'slug'])) {
+                PackageTermSync::safely(static fn (PackageTermSync $terms) => $terms->syncOne((int) $package->getKey()));
+            }
+        });
+
+        Package::deleted(static function (Package $package): void {
+            PackageTermSync::safely(static fn (PackageTermSync $terms) => $terms->forget((int) $package->getKey()));
+        });
+
+        if (! function_exists('addAction')) {
+            return;
+        }
+
+        $isPackage = static fn (mixed $type): bool => PackageFields::CONTENT_TYPE === $type;
+
+        $sync = static function (mixed $type, mixed $data = null, mixed $record = null) use ($isPackage): void {
+            if ($isPackage($type) && is_numeric($record)) {
+                PackageTermSync::safely(static fn (PackageTermSync $terms) => $terms->syncOne((int) $record));
+            }
+        };
+
+        addAction('keystone.admin.contentTypes.record.created', $sync);
+        addAction('keystone.admin.contentTypes.record.updated', $sync);
+
+        addAction('keystone.admin.contentTypes.record.deleted', static function (mixed $type, mixed $row = null, mixed $record = null) use ($isPackage): void {
+            if ($isPackage($type) && is_numeric($record)) {
+                PackageTermSync::safely(static fn (PackageTermSync $terms) => $terms->forget((int) $record));
+            }
+        });
+
+        addAction('keystone.admin.contentTypes.records.bulkDeleted', static function (mixed $type, mixed $ids = null) use ($isPackage): void {
+            if (! $isPackage($type) || ! is_array($ids)) {
+                return;
+            }
+
+            foreach ($ids as $id) {
+                if (is_numeric($id)) {
+                    PackageTermSync::safely(static fn (PackageTermSync $terms) => $terms->forget((int) $id));
+                }
+            }
+        });
     }
 
     private static function registerDeletePurge(): void

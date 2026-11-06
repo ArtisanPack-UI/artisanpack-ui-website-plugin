@@ -30,13 +30,14 @@ final class Package extends Model
     protected $table = 'packages';
 
     /**
-     * The core columns plus the custom fields
-     * {@see \ArtisanPackUI\Site\Support\PackageFields} registers.
+     * The core columns (`slug` comes from Keystone's permalinks) plus the
+     * custom fields {@see \ArtisanPackUI\Site\Support\PackageFields}
+     * registers.
      *
      * @var array<int, string>
      */
     protected $fillable = [
-        'title', 'content', 'excerpt', 'status', 'published_at', 'featured_image_id',
+        'title', 'slug', 'content', 'excerpt', 'status', 'published_at', 'featured_image_id',
         'docs_package_id', 'registry', 'composer_name', 'npm_name', 'github_repo',
         'version', 'license', 'icon', 'docs_url', 'last_synced_at', 'sticky',
     ];

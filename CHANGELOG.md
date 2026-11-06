@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A Packages taxonomy on blog posts.** The plugin provisions a `package`
+  taxonomy bound to blog posts, so Edit Post gets a **Packages** panel, a
+  Query block can filter to one package's posts, and each package has a
+  "Package updates" archive at `/blog/package/{slug}`. The plugin keeps one
+  term per package, named and slugged after it: terms are created, renamed
+  and deleted as packages are, from the admin, the docs import or a sync.
+  Renaming a package renames its term in place, so tagged posts stay tagged
+  and Keystone redirects the old archive URL. Deleting the plugin removes the
+  taxonomy, its terms and their assignments (#49).
+
+### Changed
+
+- Requires Keystone 0.19.0 (cms-framework 2.18), the first release with
+  custom taxonomies on blog posts.
+
 ## [1.4.1] - 2026-11-03
 
 ### Added
