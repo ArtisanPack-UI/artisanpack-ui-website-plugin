@@ -22,6 +22,9 @@ use Illuminate\Contracts\Auth\Authenticatable;
  *   - {@see self::SETTINGS_MANAGE}: edit integration settings and run
  *     connection tests. Kept apart from {@see self::SYNC} because the
  *     settings hold the credentials sync runs on.
+ *   - {@see self::RECAPS_CREATE}: draft the weekly recap post with AI from
+ *     the Blog Posts screen. Kept apart because every run is a billed AI
+ *     call and creates a post.
  *
  * {@see self::ACCESS} is not a stored permission. It is a Gate ability that
  * passes when the user holds any of them, and gates the plugin's nav
@@ -49,6 +52,11 @@ final class Permissions
     public const SETTINGS_MANAGE = 'artisanpack-ui.settings.manage';
 
     /**
+     * @since 1.6.0
+     */
+    public const RECAPS_CREATE = 'artisanpack-ui.recaps.create';
+
+    /**
      * Gate ability: the user holds at least one plugin permission.
      */
     public const ACCESS = 'artisanpack-ui.access';
@@ -60,7 +68,7 @@ final class Permissions
      */
     public static function all(): array
     {
-        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW, self::SETTINGS_MANAGE];
+        return [self::SYNC, self::ISSUES_MANAGE, self::STATS_VIEW, self::SETTINGS_MANAGE, self::RECAPS_CREATE];
     }
 
     /**
@@ -78,7 +86,7 @@ final class Permissions
     /**
      * What the given user may do, keyed for the React bundle.
      *
-     * @return array{sync: bool, issuesManage: bool, statsView: bool, settingsManage: bool}
+     * @return array{sync: bool, issuesManage: bool, statsView: bool, settingsManage: bool, recapsCreate: bool}
      */
     public static function abilitiesFor(Gate $gate, ?Authenticatable $user): array
     {
@@ -89,6 +97,7 @@ final class Permissions
             'issuesManage'   => $allows(self::ISSUES_MANAGE),
             'statsView'      => $allows(self::STATS_VIEW),
             'settingsManage' => $allows(self::SETTINGS_MANAGE),
+            'recapsCreate'   => $allows(self::RECAPS_CREATE),
         ];
     }
 }

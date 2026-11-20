@@ -132,6 +132,59 @@ abstract class TestCase extends BaseTestCase
             $table->unique(['content_type_slug', 'record_id', 'term_id']);
         });
 
+        // The host's media library and blog tables, as artisanpack-ui/media-library
+        // and cms-framework leave them, for the weekly recap.
+        Schema::create('media', function (Blueprint $table): void {
+            $table->id();
+            $table->string('title')->nullable();
+            $table->string('file_name');
+            $table->string('file_path');
+            $table->string('disk')->default('public');
+            $table->string('mime_type');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('posts', function (Blueprint $table): void {
+            $table->id();
+            $table->string('title');
+            $table->string('slug')->unique();
+            $table->longText('content')->nullable();
+            $table->json('block_content')->nullable();
+            $table->text('excerpt')->nullable();
+            $table->unsignedBigInteger('featured_image_id')->nullable();
+            $table->unsignedBigInteger('author_id')->nullable();
+            $table->string('status', 32)->default('draft');
+            $table->timestamp('published_at')->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('post_categories', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->timestamps();
+        });
+
+        Schema::create('post_category_pivots', function (Blueprint $table): void {
+            $table->unsignedBigInteger('post_id');
+            $table->unsignedBigInteger('post_category_id');
+        });
+
+        Schema::create('post_tags', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->timestamps();
+        });
+
+        Schema::create('post_tag_pivots', function (Blueprint $table): void {
+            $table->unsignedBigInteger('post_id');
+            $table->unsignedBigInteger('post_tag_id');
+        });
+
         $this->loadMigrationsFrom(dirname(__DIR__) . '/database/migrations');
     }
 

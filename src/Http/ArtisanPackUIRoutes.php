@@ -179,6 +179,9 @@ final class ArtisanPackUIRoutes
             ->group(function (): void {
                 Route::middleware('permission:' . Permissions::SETTINGS_MANAGE)->group(function (): void {
                     Route::name('settings.update')->put('settings', [SettingsController::class, 'update']);
+                    Route::name('settings.recap-images')
+                        ->middleware('throttle:' . self::ICON_CATALOG_LIMIT . ',1')
+                        ->get('settings/recap-images', [SettingsController::class, 'recapImages']);
 
                     Route::middleware('throttle:' . self::CONNECTION_TEST_LIMIT . ',1')->group(function (): void {
                         Route::name('settings.test-docs')->post('settings/test/docs', [SettingsController::class, 'testDocs']);

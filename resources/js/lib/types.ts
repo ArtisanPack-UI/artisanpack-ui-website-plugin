@@ -21,6 +21,7 @@ export interface Abilities {
     issuesManage: boolean;
     statsView: boolean;
     settingsManage: boolean;
+    recapsCreate: boolean;
 }
 
 /**
@@ -49,6 +50,18 @@ export interface IntegrationSettings {
     mastodonInstanceUrl: string | null;
     hasMastodonAccessToken: boolean;
     excludedRepositories: string[];
+    recapFeaturedImage: MediaImage | null;
+    recapTitlePattern: string;
+    recapStyleGuide: string | null;
+}
+
+/**
+ * A media library image, as the recap featured image picker lists it.
+ */
+export interface MediaImage {
+    id: number;
+    title: string;
+    url: string | null;
 }
 
 /**
@@ -69,6 +82,7 @@ export interface SettingsPageProps extends PluginPageProps {
         testBluesky: string;
         testMastodon: string;
         webhook: string;
+        recapImages: string;
     };
 }
 

@@ -5,7 +5,8 @@
  * Connection details for the docs site API, the GitHub App installed on the
  * ArtisanPack-UI org, and release announcements (the GitHub webhook plus the
  * Bluesky and Mastodon accounts), with a "Test connection" check for each
- * service. Saving
+ * service, and the weekly recap post's featured image, title pattern and
+ * style guide. Saving
  * and testing go through the plugin's JSON endpoints; the checks run
  * against the *saved* settings, so a test after editing asks to save first.
  *
@@ -17,9 +18,10 @@
 
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 
+import { MediaImagePicker } from '../components/MediaImagePicker';
 import { CARD_CLASS, PluginPage } from '../components/ui';
 import { ApiError, apiFetch } from '../lib/http';
-import type { ConnectionCheck, IntegrationSettings, SettingsPageProps } from '../lib/types';
+import type { ConnectionCheck, IntegrationSettings, MediaImage, SettingsPageProps } from '../lib/types';
 
 const INPUT_CLASS =
     'h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm text-base-content outline-none focus:border-primary';
@@ -45,6 +47,9 @@ interface FormState {
     mastodon_access_token: string;
     remove_mastodon_access_token: boolean;
     announcement_excluded_repositories: string;
+    recap_featured_image: MediaImage | null;
+    recap_title_pattern: string;
+    recap_style_guide: string;
 }
 
 function formFrom(settings: IntegrationSettings): FormState {
@@ -67,6 +72,9 @@ function formFrom(settings: IntegrationSettings): FormState {
         mastodon_access_token: '',
         remove_mastodon_access_token: false,
         announcement_excluded_repositories: settings.excludedRepositories.join('\n'),
+        recap_featured_image: settings.recapFeaturedImage,
+        recap_title_pattern: settings.recapTitlePattern,
+        recap_style_guide: settings.recapStyleGuide ?? '',
     };
 }
 
@@ -114,11 +122,13 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
         setErrors({});
 
         try {
+            const { recap_featured_image: recapFeaturedImage, ...fields } = form;
             const response = await apiFetch<{ message: string; settings: IntegrationSettings }>(endpoints.update, {
                 method: 'PUT',
                 body: JSON.stringify({
-                    ...form,
+                    ...fields,
                     github_project_number: form.github_project_number === '' ? null : Number(form.github_project_number),
+                    recap_featured_image_id: recapFeaturedImage?.id ?? null,
                 }),
             });
 
@@ -165,7 +175,7 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
             can={can}
             active="settings"
             title="ArtisanPack UI settings"
-            description="Connections to the docs site, the ArtisanPack-UI GitHub App, and the accounts that announce releases."
+            description="Connections to the docs site, the ArtisanPack-UI GitHub App and the accounts that announce releases, and the weekly recap post."
         >
             <form onSubmit={save} className="space-y-6">
                 <section className={CARD_CLASS}>
@@ -405,6 +415,47 @@ export default function SettingsPage({ nav, can, settings: initialSettings, endp
                         dirty={dirty}
                         onRun={() => runCheck(endpoints.testMastodon, setMastodonCheck)}
                     />
+                </section>
+
+                <section className={CARD_CLASS}>
+                    <h2 className="text-base font-semibold text-base-content">Weekly recap post</h2>
+                    <p className="mt-1 text-sm text-base-content/60">
+                        The "Create New Recap Post" button on Blog Posts drafts the weekly post with AI, from the
+                        releases since the last recap and your notes. Every recap post gets this featured image,
+                        the Updates category and a title from the pattern below. The AI writes to the style guide.
+                    </p>
+
+                    <div className="mt-5 grid gap-4">
+                        <MediaImagePicker
+                            endpoint={endpoints.recapImages}
+                            value={form.recap_featured_image}
+                            error={errors.recap_featured_image_id}
+                            onChange={(image) => update('recap_featured_image', image)}
+                        />
+                        <Field
+                            label="Title pattern"
+                            error={errors.recap_title_pattern}
+                            hint="{date} becomes the publish date, e.g. November 21, 2026. Posts whose titles start with the text before {date}, in the Updates category, count as earlier recaps."
+                        >
+                            <input
+                                className={INPUT_CLASS}
+                                value={form.recap_title_pattern}
+                                onChange={(event) => update('recap_title_pattern', event.target.value)}
+                            />
+                        </Field>
+                        <Field
+                            label="Style guide"
+                            error={errors.recap_style_guide}
+                            hint="Tone, recurring sections, sign-off: anything the AI should follow in every recap. It also reads your last few recaps."
+                        >
+                            <textarea
+                                rows={6}
+                                className="w-full rounded-md border border-base-300/60 bg-base-100 px-3 py-2 text-sm text-base-content outline-none focus:border-primary"
+                                value={form.recap_style_guide}
+                                onChange={(event) => update('recap_style_guide', event.target.value)}
+                            />
+                        </Field>
+                    </div>
                 </section>
 
                 <div className="flex items-center gap-3">
