@@ -18,6 +18,7 @@ use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
 use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Services\AdminWidgetManager;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Site\Ai\KeystoneRecapWriter;
@@ -28,6 +29,8 @@ use ArtisanPackUI\Site\Blocks\TerminalBlock;
 use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
+use ArtisanPackUI\Site\Services\Recap\KeystoneRecapPostWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapPostWriter;
 use ArtisanPackUI\Site\Services\Recap\RecapWriter;
 use ArtisanPackUI\Site\Support\AdminPages;
 use ArtisanPackUI\Site\Support\IconPickerField;
@@ -113,6 +116,10 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
      */
     protected function registerRecapServices(): void
     {
+        if (class_exists(BlogManager::class)) {
+            $this->app->bind(RecapPostWriter::class, KeystoneRecapPostWriter::class);
+        }
+
         if (! class_exists(ArtisanPackAgent::class) || ! interface_exists(FeatureRegistry::class) || ! $this->app->bound(FeatureRegistry::class)) {
             return;
         }

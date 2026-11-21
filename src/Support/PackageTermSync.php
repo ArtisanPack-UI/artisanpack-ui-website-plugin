@@ -221,6 +221,39 @@ final class PackageTermSync
     }
 
     /**
+     * The blog post Packages terms of the given packages, for packages that
+     * have one. Order follows `$packageIds`.
+     *
+     * @param  list<int>  $packageIds
+     *
+     * @return list<int>
+     *
+     * @since 1.6.0
+     */
+    public function termIdsFor(array $packageIds): array
+    {
+        if ([] === $packageIds || ! $this->isReady()) {
+            return [];
+        }
+
+        $terms = DB::table(self::MAP_TABLE)
+            ->join(self::TERMS_TABLE, self::TERMS_TABLE . '.id', '=', self::MAP_TABLE . '.term_id')
+            ->where(self::TERMS_TABLE . '.taxonomy_slug', PackageContentType::POST_TAXONOMY)
+            ->whereIn(self::MAP_TABLE . '.package_id', $packageIds)
+            ->pluck(self::MAP_TABLE . '.term_id', self::MAP_TABLE . '.package_id');
+
+        $ids = [];
+
+        foreach ($packageIds as $packageId) {
+            if (isset($terms[$packageId])) {
+                $ids[] = (int) $terms[$packageId];
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
      * Package `$packageId`'s term, or null when it has none or the term was
      * deleted from under it.
      */

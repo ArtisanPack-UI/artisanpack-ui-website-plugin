@@ -14,7 +14,9 @@ use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
+use ArtisanPackUI\Site\Services\Recap\NullRecapPostWriter;
 use ArtisanPackUI\Site\Services\Recap\NullRecapWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapPostWriter;
 use ArtisanPackUI\Site\Services\Recap\RecapWriter;
 use ArtisanPackUI\VisualEditor\Registries\BlockBindingSourceRegistry;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
@@ -47,14 +49,16 @@ final class PluginBootstrapper
      * resolution, so the API clients and connection checks autowire against
      * whatever the Settings page last saved.
      *
-     * The recap's AI starts as {@see NullRecapWriter}; the provider swaps in
-     * the Keystone-backed writer where the AI module is installed.
+     * The recap's AI and post writers start as {@see NullRecapWriter} and
+     * {@see NullRecapPostWriter}; the provider swaps in the Keystone-backed
+     * ones where the AI module and the blog are installed.
      */
     public static function register(Application $app): void
     {
         $app->bind(IntegrationSettings::class, static fn (): IntegrationSettings => IntegrationSettings::current());
 
         $app->bindIf(RecapWriter::class, NullRecapWriter::class);
+        $app->bindIf(RecapPostWriter::class, NullRecapPostWriter::class);
 
         $app->scoped(PackageStatsLookup::class);
 
