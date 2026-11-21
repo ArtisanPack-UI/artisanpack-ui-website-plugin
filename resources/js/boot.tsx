@@ -8,7 +8,8 @@
  *
  * Contributes the Docs, Stats and Issues tabs, the sync status panel and
  * the icon picker to the `package` edit screen, the "Sync from docs"
- * button to the Packages list, the dashboard widgets' bodies, and the
+ * button to the Packages list, "Create New Recap Post" to Blog Posts, the
+ * dashboard widgets' bodies, and the
  * client-side editor previews for the copy-command and terminal blocks.
  * The server-side `ap.cmsFramework.admin.contentEdit.tabs` filter can't do it
  * today: the host's dynamic content-type edit controller never ships the
@@ -27,6 +28,7 @@
 import { addAction, addFilter, doAction } from '@artisanpack-ui/hooks-js';
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 
+import { RecapButton } from './components/recap/RecapButton';
 import { SyncFromDocsButton } from './components/SyncFromDocsButton';
 import { registerClientPreviews } from './editor/client-previews';
 import { NoAccess, useAbilities } from './components/ui';
@@ -213,6 +215,16 @@ addFilter('keystone.admin.topbar.right', (node: unknown) => (
         <SyncFromDocsButton />
     </>
 ));
+
+/**
+ * Add "Create New Recap Post" beside "New post" on Blog Posts, through the
+ * header-actions filter Keystone 0.21 added. The button renders nothing for
+ * admins without the recap permission or while the recap can't run.
+ */
+addFilter('keystone.admin.posts.index.headerActions', (actions: unknown) => [
+    ...(Array.isArray(actions) ? actions : []),
+    <RecapButton key="artisanpack-ui-recap" />,
+]);
 
 /**
  * The dashboard stats and board widgets' bodies (roadmap 4.3 and 5.5),

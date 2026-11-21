@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A weekly recap post generator.** "Create New Recap Post" on Blog Posts
+  opens a modal for the publish date and notes. The plugin gathers every
+  stable release since the last recap (a post in Updates whose title starts
+  with the title pattern), the pull requests merged across the org in that
+  window, and any GitHub or web links in the notes. Keystone's AI then
+  writes an outline you refine by chatting. "Create Post" writes the full
+  draft and saves it as an unscheduled draft with the pattern title, focus
+  keyword, meta description, excerpt, the Updates category, the featured
+  image, tags (existing ones first, at most three new) and the Packages
+  terms. Then it opens the editor. Sessions are saved, so closing the modal
+  keeps the recap for seven days (#58, #59, #60, #61, #62, #63, #64).
+- **Weekly recap settings.** A featured image (picked from the media
+  library), the title pattern (`This Week in ArtisanPack UI: {date}` by
+  default) and a style guide for the AI (#59).
+- **A new `artisanpack-ui.recaps.create` permission** for the recap generator
+  (#59).
+- **A "Weekly recap posts" AI feature** in AI Studio → Features, so the
+  recap can be switched off and its usage is tracked with the rest (#61).
+
+### Upgrading
+
+- Run the plugin's migrations after updating. They add the recap settings
+  columns and the `artisanpack_ui_recap_sessions` table.
+- The button needs Keystone 0.21.0 or later (its Blog Posts header-actions
+  filter). It also needs Keystone's AI feature set up and consented, and the
+  GitHub App configured. On an older Keystone the button doesn't appear and
+  nothing else changes.
+- The AI steps run on the queue. An outline or draft can take longer than
+  the database queue's default `retry_after` of 90 seconds, so set
+  `DB_QUEUE_RETRY_AFTER` above 600 where a queue worker runs.
+
 ## [1.5.0] - 2026-11-05
 
 ### Added

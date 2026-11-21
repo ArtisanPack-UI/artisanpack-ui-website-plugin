@@ -19,7 +19,8 @@ interface RecapPostWriter
 {
     /**
      * Create the post as a draft, with its category, tags, Packages terms,
-     * featured image and SEO meta, all or nothing.
+     * featured image and SEO meta, all or nothing. `editUrl` is the path to
+     * the post's admin editor.
      *
      * @return array{id: int, editUrl: string}
      *

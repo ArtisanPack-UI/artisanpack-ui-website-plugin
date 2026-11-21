@@ -68,7 +68,9 @@ final class KeystoneRecapPostWriter implements RecapPostWriter
             throw new RecapException(__('The draft post couldn\'t be created: :message', ['message' => mb_substr($exception->getMessage(), 0, 300)]), 0, $exception);
         }
 
-        return ['id' => (int) $post->getKey(), 'editUrl' => route('admin.posts.edit', $post)];
+        // Relative, so the modal's Inertia visit stays on the page's own
+        // origin even when APP_URL's scheme or host differs from it.
+        return ['id' => (int) $post->getKey(), 'editUrl' => route('admin.posts.edit', $post, false)];
     }
 
     /**
