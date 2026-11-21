@@ -13,6 +13,7 @@ use ArtisanPackUI\Site\Http\Controllers\IssueController;
 use ArtisanPackUI\Site\Http\Controllers\PackageDocsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageStatsController;
 use ArtisanPackUI\Site\Http\Controllers\PackageSyncController;
+use ArtisanPackUI\Site\Http\Controllers\RecapController;
 use ArtisanPackUI\Site\Http\Controllers\SettingsController;
 use ArtisanPackUI\Site\Services\Dashboard\DashboardWidgetData;
 use ArtisanPackUI\Site\Support\Permissions;
@@ -113,6 +114,23 @@ final class ArtisanPackUIRoutes
      * this doesn't open up GitHub the way the board reads would.
      */
     public const WIDGET_LIMIT = 300;
+
+    /**
+     * Requests per minute, per user, that start AI work on a weekly recap:
+     * starting one, asking for a revision, creating the post, retrying.
+     * Each is a billed AI run.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_WRITE_LIMIT = 20;
+
+    /**
+     * Requests per minute, per user, to the recap reads. The modal polls
+     * every couple of seconds while a step runs.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_READ_LIMIT = 120;
 
     /**
      * Requests per minute, per address, to the GitHub webhook. GitHub sends
@@ -259,6 +277,22 @@ final class ArtisanPackUIRoutes
                             ->get('stats/{widget}', [DashboardWidgetController::class, 'stats'])
                             ->whereIn('widget', DashboardWidgetData::STATS_WIDGETS);
                     });
+
+                // The weekly recap modal on Blog Posts.
+                Route::middleware('permission:' . Permissions::RECAPS_CREATE)->prefix('recaps')->name('recaps.')->group(function (): void {
+                    Route::middleware('throttle:' . self::RECAP_READ_LIMIT . ',1,artisanpack-ui-recaps-read')->group(function (): void {
+                        Route::name('current')->get('current', [RecapController::class, 'current']);
+                        Route::name('show')->get('{recap}', [RecapController::class, 'show'])->whereNumber('recap');
+                    });
+
+                    Route::middleware('throttle:' . self::RECAP_WRITE_LIMIT . ',1,artisanpack-ui-recaps')->group(function (): void {
+                        Route::name('store')->post('/', [RecapController::class, 'store']);
+                        Route::name('messages.store')->post('{recap}/messages', [RecapController::class, 'message'])->whereNumber('recap');
+                        Route::name('post')->post('{recap}/post', [RecapController::class, 'createPost'])->whereNumber('recap');
+                        Route::name('retry')->post('{recap}/retry', [RecapController::class, 'retry'])->whereNumber('recap');
+                        Route::name('destroy')->delete('{recap}', [RecapController::class, 'destroy'])->whereNumber('recap');
+                    });
+                });
 
                 // The icon picker on Edit Package. Icons are public data, so
                 // any plugin permission will do.

@@ -13,9 +13,11 @@ use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Models\RecapSession;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use ArtisanPackUI\Site\Services\Recap\NullRecapPostWriter;
 use ArtisanPackUI\Site\Services\Recap\NullRecapWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapAvailability;
 use ArtisanPackUI\Site\Services\Recap\RecapPostWriter;
 use ArtisanPackUI\Site\Services\Recap\RecapWriter;
 use ArtisanPackUI\VisualEditor\Registries\BlockBindingSourceRegistry;
@@ -136,6 +138,10 @@ final class PluginBootstrapper
             File::deleteDirectory(PackageIconSet::defaultDirectory());
         }
 
+        if (Schema::hasTable('artisanpack_ui_recap_sessions')) {
+            RecapSession::query()->delete();
+        }
+
         Cache::forget(PackageContentType::provisionedMarkerKey());
         app(PackageTermSync::class)->purge();
     }
@@ -234,6 +240,7 @@ final class PluginBootstrapper
                     'packagesList' => Route::has('admin.content.index') ? route('admin.content.index', ['contentType' => 'package']) : null,
                     'package'      => self::packageEndpoints(),
                     'board'        => self::boardEndpoints(),
+                    'recaps'       => self::recapEndpoints($app, $gate, $user),
                 ],
             ];
         } catch (RouteNotFoundException $exception) {
@@ -243,6 +250,29 @@ final class PluginBootstrapper
 
             return [];
         }
+    }
+
+    /**
+     * The weekly recap's start and resume endpoints, and whether it can run
+     * now, for the Blog Posts button; null for a user without
+     * {@see Permissions::RECAPS_CREATE}, so the availability check (which
+     * reads the AI consent) only runs for those who can use it.
+     *
+     * @return array{available: bool, current: string, store: string}|null
+     *
+     * @since 1.6.0
+     */
+    private static function recapEndpoints(Application $app, Gate $gate, mixed $user): ?array
+    {
+        if (! $gate->forUser($user)->allows(Permissions::RECAPS_CREATE)) {
+            return null;
+        }
+
+        return [
+            'available' => $app->make(RecapAvailability::class)->isAvailable(),
+            'current'   => route('artisanpack-ui.recaps.current'),
+            'store'     => route('artisanpack-ui.recaps.store'),
+        ];
     }
 
     /**
@@ -288,7 +318,8 @@ final class PluginBootstrapper
     }
 
     /**
-     * Schedule the daily package sync and, after it, the stats snapshot.
+     * Schedule the daily package sync and, after it, the stats snapshot,
+     * and the daily clean-up of expired recap sessions.
      * Plugins boot late, during the host's own boot, so the scheduler may
      * already be resolved: then the jobs are added at once, otherwise when
      * it first resolves (the same as `ServiceProvider::callAfterResolving()`).
@@ -298,6 +329,10 @@ final class PluginBootstrapper
         $schedule = static function (Schedule $schedule): void {
             SyncPackages::schedule($schedule);
             CollectPackageStats::schedule($schedule);
+
+            $schedule->call(static fn (): int => RecapSession::pruneExpired())
+                ->daily()
+                ->name('artisanpack-ui:prune-recap-sessions');
         };
 
         $app->afterResolving(Schedule::class, $schedule);
