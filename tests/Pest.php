@@ -7,7 +7,9 @@ use ArtisanPackUI\Site\Tests\Fixtures\User;
 use ArtisanPackUI\Site\Tests\TestCase;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 pest()
     ->extend(TestCase::class)
@@ -80,4 +82,30 @@ function useTemporaryIconSet(): PackageIconSet
 function testSvg(string $path = 'M0 0h24v24H0z'): string
 {
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="' . $path . '"/></svg>';
+}
+
+/**
+ * Add a blog post filed under the given category (Updates by default) and
+ * return its id, the way the host's blog leaves one.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function recapPost(string $title, string $publishedAt, array $attributes = [], string $categorySlug = 'updates'): int
+{
+    $categoryId = DB::table('post_categories')->where('slug', $categorySlug)->value('id')
+        ?? DB::table('post_categories')->insertGetId(['name' => ucfirst($categorySlug), 'slug' => $categorySlug, 'created_at' => now(), 'updated_at' => now()]);
+
+    $postId = DB::table('posts')->insertGetId([
+        'title'        => $title,
+        'slug'         => Str::slug($title) . '-' . Str::random(4),
+        'status'       => 'published',
+        'published_at' => $publishedAt,
+        'created_at'   => now(),
+        'updated_at'   => now(),
+        ...$attributes,
+    ]);
+
+    DB::table('post_category_pivots')->insert(['post_id' => $postId, 'post_category_id' => $categoryId]);
+
+    return (int) $postId;
 }

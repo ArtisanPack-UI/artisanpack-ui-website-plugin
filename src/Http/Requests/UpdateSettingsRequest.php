@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Http\Requests;
 
 use ArtisanPackUI\Site\Models\IntegrationSettings;
+use ArtisanPackUI\Site\Support\MediaImages;
 use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
@@ -84,6 +85,10 @@ final class UpdateSettingsRequest extends FormRequest
             'mastodon_access_token'              => ['nullable', 'string', 'max:2000'],
             'remove_mastodon_access_token'       => ['sometimes', 'boolean'],
             'announcement_excluded_repositories' => ['nullable', 'string', 'max:5000', $this->repositoryListRule()],
+
+            'recap_featured_image_id' => ['nullable', 'integer', 'min:1', $this->mediaImageRule()],
+            'recap_title_pattern'     => ['nullable', 'string', 'max:255', $this->titlePatternRule()],
+            'recap_style_guide'       => ['nullable', 'string', 'max:10000'],
         ];
     }
 
@@ -158,6 +163,10 @@ final class UpdateSettingsRequest extends FormRequest
             'mastodon_instance_url'              => __('Mastodon instance URL'),
             'mastodon_access_token'              => __('access token'),
             'announcement_excluded_repositories' => __('excluded repositories'),
+
+            'recap_featured_image_id' => __('featured image'),
+            'recap_title_pattern'     => __('title pattern'),
+            'recap_style_guide'       => __('style guide'),
         ];
     }
 
@@ -190,6 +199,55 @@ final class UpdateSettingsRequest extends FormRequest
 
                     return;
                 }
+            }
+        };
+    }
+
+    /**
+     * The recap featured image must be an image in the media library that
+     * isn't trashed.
+     *
+     * @since 1.6.0
+     */
+    private function mediaImageRule(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            if (! is_numeric($value) || ! MediaImages::exists((int) $value)) {
+                $fail(__('Choose an image from the media library.'));
+            }
+        };
+    }
+
+    /**
+     * The recap title pattern must say where the publish date goes, start
+     * with text that identifies a recap (earlier recaps are found by it),
+     * and render a title that fits the sessions table with any date.
+     *
+     * @since 1.6.0
+     */
+    private function titlePatternRule(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            if (! is_string($value) || ! str_contains($value, IntegrationSettings::RECAP_DATE_PLACEHOLDER)) {
+                $fail(__('The title pattern must contain :placeholder, where the publish date goes.', [
+                    'placeholder' => IntegrationSettings::RECAP_DATE_PLACEHOLDER,
+                ]));
+
+                return;
+            }
+
+            if ('' === IntegrationSettings::recapTitlePrefixOf($value)) {
+                $fail(__('The title pattern must start with some text before :placeholder, which is how earlier recaps are found.', [
+                    'placeholder' => IntegrationSettings::RECAP_DATE_PLACEHOLDER,
+                ]));
+
+                return;
+            }
+
+            $longest = str_replace(IntegrationSettings::RECAP_DATE_PLACEHOLDER, str_repeat('x', IntegrationSettings::RECAP_DATE_MAX_LENGTH), trim($value));
+
+            if (mb_strlen($longest) > IntegrationSettings::RECAP_TITLE_MAX_LENGTH) {
+                $fail(__('The title pattern makes titles longer than :max characters. Shorten it.', ['max' => IntegrationSettings::RECAP_TITLE_MAX_LENGTH]));
             }
         };
     }

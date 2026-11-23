@@ -18,7 +18,7 @@ plugins/artisanpack-ui/
 │   ├── Blocks/                              # Server-rendered visual editor blocks
 │   ├── Casts/                               # SafeEncrypted (credentials at rest)
 │   ├── Http/                                # JSON endpoints, routes and the asset route
-│   ├── Jobs/                                # Daily package sync and stats snapshot
+│   ├── Jobs/                                # Package sync, stats snapshot, recap steps
 │   ├── Models/                              # Settings, package, sync state, snapshots
 │   ├── Services/                            # Docs site, GitHub, boards, sync, stats
 │   ├── Support/                             # Permissions, bootstrapper, field defs
@@ -132,9 +132,27 @@ the daily stats snapshots and so show figures as of the last stats run, and the
 kanban board widget (card counts per Status column) for users with
 `artisanpack-ui.issues.manage`.
 
+### Weekly recap posts
+
+Users with `artisanpack-ui.recaps.create` get a **Create New Recap Post**
+button on Blog Posts. It opens a modal for the publish date and notes. The plugin
+gathers the stable releases of the site's packages since the last recap (or
+the last seven days), the pull requests merged across the org in that window,
+and any links in the notes. Keystone's AI then writes an outline you refine by
+chatting. **Create post** saves an unscheduled draft with the title pattern, SEO
+meta, excerpt, the Updates category, the featured image, tags and Packages terms,
+then opens the editor. Sessions are kept for seven days, so closing the modal
+doesn't lose the recap.
+
+It needs Keystone 0.21.0 or later, Keystone's AI set up and consented, the
+"Weekly recap posts" feature on in AI Studio → Features, and the GitHub App
+configured. The featured image, title pattern and AI style guide are in
+Settings. The outline and draft run as queued jobs, so set
+`DB_QUEUE_RETRY_AFTER` above 600 where a database queue worker runs.
+
 ## Permissions
 
-Activation seeds four permissions, all granted to admins:
+Activation seeds five permissions, all granted to admins:
 
 | Permission | Grants |
 |---|---|
@@ -142,6 +160,7 @@ Activation seeds four permissions, all granted to admins:
 | `artisanpack-ui.issues.manage` | The kanban boards and editing issues |
 | `artisanpack-ui.stats.view` | The Stats tab and the dashboard stats widgets |
 | `artisanpack-ui.settings.manage` | The Settings page and its connection tests |
+| `artisanpack-ui.recaps.create` | The weekly recap generator on Blog Posts |
 
 Holding any one of them shows the ArtisanPack UI nav entry.
 

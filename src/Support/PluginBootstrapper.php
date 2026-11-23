@@ -13,7 +13,13 @@ use ArtisanPackUI\Site\Jobs\CollectPackageStats;
 use ArtisanPackUI\Site\Jobs\SyncPackages;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
+use ArtisanPackUI\Site\Models\RecapSession;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
+use ArtisanPackUI\Site\Services\Recap\NullRecapPostWriter;
+use ArtisanPackUI\Site\Services\Recap\NullRecapWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapAvailability;
+use ArtisanPackUI\Site\Services\Recap\RecapPostWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapWriter;
 use ArtisanPackUI\VisualEditor\Registries\BlockBindingSourceRegistry;
 use ArtisanPackUI\VisualEditor\Services\Icon\SvgSanitizer;
 use Illuminate\Console\Scheduling\Schedule;
@@ -44,10 +50,17 @@ final class PluginBootstrapper
      * Resolve {@see IntegrationSettings} to the saved row, fresh on every
      * resolution, so the API clients and connection checks autowire against
      * whatever the Settings page last saved.
+     *
+     * The recap's AI and post writers start as {@see NullRecapWriter} and
+     * {@see NullRecapPostWriter}; the provider swaps in the Keystone-backed
+     * ones where the AI module and the blog are installed.
      */
     public static function register(Application $app): void
     {
         $app->bind(IntegrationSettings::class, static fn (): IntegrationSettings => IntegrationSettings::current());
+
+        $app->bindIf(RecapWriter::class, NullRecapWriter::class);
+        $app->bindIf(RecapPostWriter::class, NullRecapPostWriter::class);
 
         $app->scoped(PackageStatsLookup::class);
 
@@ -123,6 +136,10 @@ final class PluginBootstrapper
             app(GitHubAppClient::class)->forgetInstallationToken();
             IntegrationSettings::query()->delete();
             File::deleteDirectory(PackageIconSet::defaultDirectory());
+        }
+
+        if (Schema::hasTable('artisanpack_ui_recap_sessions')) {
+            RecapSession::query()->delete();
         }
 
         Cache::forget(PackageContentType::provisionedMarkerKey());
@@ -223,6 +240,7 @@ final class PluginBootstrapper
                     'packagesList' => Route::has('admin.content.index') ? route('admin.content.index', ['contentType' => 'package']) : null,
                     'package'      => self::packageEndpoints(),
                     'board'        => self::boardEndpoints(),
+                    'recaps'       => self::recapEndpoints($app, $gate, $user),
                 ],
             ];
         } catch (RouteNotFoundException $exception) {
@@ -232,6 +250,29 @@ final class PluginBootstrapper
 
             return [];
         }
+    }
+
+    /**
+     * The weekly recap's start and resume endpoints, and whether it can run
+     * now, for the Blog Posts button; null for a user without
+     * {@see Permissions::RECAPS_CREATE}, so the availability check (which
+     * reads the AI consent) only runs for those who can use it.
+     *
+     * @return array{available: bool, current: string, store: string}|null
+     *
+     * @since 1.6.0
+     */
+    private static function recapEndpoints(Application $app, Gate $gate, mixed $user): ?array
+    {
+        if (! $gate->forUser($user)->allows(Permissions::RECAPS_CREATE)) {
+            return null;
+        }
+
+        return [
+            'available' => $app->make(RecapAvailability::class)->isAvailable(),
+            'current'   => route('artisanpack-ui.recaps.current'),
+            'store'     => route('artisanpack-ui.recaps.store'),
+        ];
     }
 
     /**
@@ -277,7 +318,8 @@ final class PluginBootstrapper
     }
 
     /**
-     * Schedule the daily package sync and, after it, the stats snapshot.
+     * Schedule the daily package sync and, after it, the stats snapshot,
+     * and the daily clean-up of expired recap sessions.
      * Plugins boot late, during the host's own boot, so the scheduler may
      * already be resolved: then the jobs are added at once, otherwise when
      * it first resolves (the same as `ServiceProvider::callAfterResolving()`).
@@ -287,6 +329,10 @@ final class PluginBootstrapper
         $schedule = static function (Schedule $schedule): void {
             SyncPackages::schedule($schedule);
             CollectPackageStats::schedule($schedule);
+
+            $schedule->call(static fn (): int => RecapSession::pruneExpired())
+                ->daily()
+                ->name('artisanpack-ui:prune-recap-sessions');
         };
 
         $app->afterResolving(Schedule::class, $schedule);

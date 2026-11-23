@@ -106,7 +106,7 @@ it('shares exactly the abilities the user holds with every page', function (): v
     actingAsUserWith([Permissions::SYNC, Permissions::STATS_VIEW]);
 
     $this->get('/admin/artisanpack-ui')->assertInertia(fn (Assert $page) => $page
-        ->where('can', ['sync' => true, 'issuesManage' => false, 'statsView' => true, 'settingsManage' => false])
+        ->where('can', ['sync' => true, 'issuesManage' => false, 'statsView' => true, 'settingsManage' => false, 'recapsCreate' => false])
         ->where('artisanpackUi.can.statsView', true)
         ->where('artisanpackUi.can.issuesManage', false));
 });

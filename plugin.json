@@ -27,7 +27,8 @@
         "artisanpack-ui.sync",
         "artisanpack-ui.issues.manage",
         "artisanpack-ui.stats.view",
-        "artisanpack-ui.settings.manage"
+        "artisanpack-ui.settings.manage",
+        "artisanpack-ui.recaps.create"
     ],
     "federated_module": {
         "name": "artisanpack-ui",

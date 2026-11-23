@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ArtisanPackUI\Site\Models;
 
 use ArtisanPackUI\Site\Casts\SafeEncrypted;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -37,6 +38,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $mastodon_instance_url
  * @property string|null $mastodon_access_token
  * @property string|null $announcement_excluded_repositories
+ * @property int|null    $recap_featured_image_id
+ * @property string|null $recap_title_pattern
+ * @property string|null $recap_style_guide
  *
  * @since 1.0.0
  */
@@ -58,6 +62,36 @@ final class IntegrationSettings extends Model
         'artisanpack-ui-website-plugin',
     ];
 
+    /**
+     * The weekly recap post title, until the Settings page saves its own.
+     * `{date}` is replaced with the publish date, e.g. "November 21, 2026".
+     *
+     * @since 1.6.0
+     */
+    public const DEFAULT_RECAP_TITLE_PATTERN = 'This Week in ArtisanPack UI: {date}';
+
+    /**
+     * The placeholder the recap title pattern must contain.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_DATE_PLACEHOLDER = '{date}';
+
+    /**
+     * The longest publish date the placeholder becomes ("September 30,
+     * 2026"), so a pattern can be checked against the title column.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_DATE_MAX_LENGTH = 18;
+
+    /**
+     * The longest recap title the sessions table holds.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_TITLE_MAX_LENGTH = 255;
+
     protected $table = 'artisanpack_ui_settings';
 
     /** @var list<string> */
@@ -75,6 +109,9 @@ final class IntegrationSettings extends Model
         'mastodon_instance_url',
         'mastodon_access_token',
         'announcement_excluded_repositories',
+        'recap_featured_image_id',
+        'recap_title_pattern',
+        'recap_style_guide',
     ];
 
     /**
@@ -211,19 +248,83 @@ final class IntegrationSettings extends Model
     }
 
     /**
+     * The recap post title pattern: the saved one, or
+     * {@see self::DEFAULT_RECAP_TITLE_PATTERN}.
+     *
+     * @since 1.6.0
+     */
+    public function recapTitlePattern(): string
+    {
+        $pattern = trim((string) $this->recap_title_pattern);
+
+        return '' === $pattern ? self::DEFAULT_RECAP_TITLE_PATTERN : $pattern;
+    }
+
+    /**
+     * The recap title for a publish date, e.g. "This Week in ArtisanPack UI:
+     * November 21, 2026".
+     *
+     * @since 1.6.0
+     */
+    public function recapTitleFor(CarbonInterface $publishDate): string
+    {
+        return str_replace(self::RECAP_DATE_PLACEHOLDER, $publishDate->format('F j, Y'), $this->recapTitlePattern());
+    }
+
+    /**
+     * The part of the title pattern before `{date}`, without trailing
+     * punctuation: what every recap title starts with, and so how an existing
+     * recap post is recognised. "This Week in ArtisanPack UI" by default.
+     *
+     * @since 1.6.0
+     */
+    public function recapTitlePrefix(): string
+    {
+        return self::recapTitlePrefixOf($this->recapTitlePattern());
+    }
+
+    /**
+     * {@see self::recapTitlePrefix()} for any pattern, so the Settings
+     * validation can refuse one that leaves nothing to recognise a recap by.
+     *
+     * @since 1.6.0
+     */
+    public static function recapTitlePrefixOf(string $pattern): string
+    {
+        $pattern = trim($pattern);
+        $at      = strpos($pattern, self::RECAP_DATE_PLACEHOLDER);
+        $prefix  = false === $at ? $pattern : substr($pattern, 0, $at);
+
+        return (string) preg_replace('/[\s:|,\-–—]+$/u', '', $prefix);
+    }
+
+    /**
+     * The recap style guide, or null when none is saved.
+     *
+     * @since 1.6.0
+     */
+    public function recapStyleGuide(): ?string
+    {
+        $guide = trim((string) $this->recap_style_guide);
+
+        return '' === $guide ? null : $guide;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'docs_api_token'         => SafeEncrypted::class,
-            'github_app_id'          => SafeEncrypted::class,
-            'github_private_key'     => SafeEncrypted::class,
-            'github_installation_id' => SafeEncrypted::class,
-            'github_project_number'  => 'integer',
-            'github_webhook_secret'  => SafeEncrypted::class,
-            'bluesky_app_password'   => SafeEncrypted::class,
-            'mastodon_access_token'  => SafeEncrypted::class,
+            'docs_api_token'          => SafeEncrypted::class,
+            'github_app_id'           => SafeEncrypted::class,
+            'github_private_key'      => SafeEncrypted::class,
+            'github_installation_id'  => SafeEncrypted::class,
+            'github_project_number'   => 'integer',
+            'github_webhook_secret'   => SafeEncrypted::class,
+            'bluesky_app_password'    => SafeEncrypted::class,
+            'mastodon_access_token'   => SafeEncrypted::class,
+            'recap_featured_image_id' => 'integer',
         ];
     }
 }

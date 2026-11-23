@@ -14,16 +14,24 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\Site;
 
+use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
+use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Services\AdminWidgetManager;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use ArtisanPackUI\Site\Ai\KeystoneRecapWriter;
+use ArtisanPackUI\Site\Ai\RecapOutlineAgent;
 use ArtisanPackUI\Site\Blocks\CopyCommandBlock;
 use ArtisanPackUI\Site\Blocks\FaqSearchBlock;
 use ArtisanPackUI\Site\Blocks\TerminalBlock;
 use ArtisanPackUI\Site\Database\Seeders\PackageContentTypeSeeder;
 use ArtisanPackUI\Site\Http\ArtisanPackUIRoutes;
 use ArtisanPackUI\Site\Http\Controllers\PluginAssetController;
+use ArtisanPackUI\Site\Services\Recap\KeystoneRecapPostWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapPostWriter;
+use ArtisanPackUI\Site\Services\Recap\RecapWriter;
 use ArtisanPackUI\Site\Support\AdminPages;
 use ArtisanPackUI\Site\Support\IconPickerField;
 use ArtisanPackUI\Site\Support\PackageContentType;
@@ -91,6 +99,48 @@ final class ArtisanPackUIServiceProvider extends PluginServiceProvider
         $this->registerDashboardWidgets();
         $this->registerContentTypes();
         $this->registerBlocks();
+        $this->registerRecapServices();
+    }
+
+    /**
+     * Wire the weekly recap to the host: the AI writer and its
+     * "Weekly recap posts" feature where Keystone's AI module is installed
+     * and switched on, and the post writer where cms-framework's blog is.
+     * Without either, the plugin's null bindings keep the recap button
+     * hidden.
+     *
+     * The feature is registered on the registry directly rather than
+     * through `ap.ai.registerFeatures`: that filter runs while the AI
+     * package boots, before plugins do. A registration failure is logged,
+     * never thrown, so it can't take the admin down.
+     */
+    protected function registerRecapServices(): void
+    {
+        if (class_exists(BlogManager::class)) {
+            $this->app->bind(RecapPostWriter::class, KeystoneRecapPostWriter::class);
+        }
+
+        if (! class_exists(ArtisanPackAgent::class) || ! interface_exists(FeatureRegistry::class) || ! $this->app->bound(FeatureRegistry::class)) {
+            return;
+        }
+
+        $this->app->bind(RecapWriter::class, KeystoneRecapWriter::class);
+
+        try {
+            $registry = $this->app->make(FeatureRegistry::class);
+
+            if (null === $registry->get(RecapWriter::FEATURE_KEY)) {
+                $registry->register(RecapWriter::FEATURE_KEY, RecapOutlineAgent::class, [
+                    'package'     => 'artisanpack-ui/website-plugin',
+                    'label'       => __('Weekly recap posts'),
+                    'description' => __('Drafts the weekly "This Week in ArtisanPack UI" post from the week\'s releases and your notes, from the Blog Posts screen.'),
+                ]);
+            }
+        } catch (Throwable $exception) {
+            Log::warning('ArtisanPack UI plugin could not register the weekly recap AI feature.', [
+                'exception' => $exception->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -21,6 +21,7 @@ export interface Abilities {
     issuesManage: boolean;
     statsView: boolean;
     settingsManage: boolean;
+    recapsCreate: boolean;
 }
 
 /**
@@ -49,6 +50,18 @@ export interface IntegrationSettings {
     mastodonInstanceUrl: string | null;
     hasMastodonAccessToken: boolean;
     excludedRepositories: string[];
+    recapFeaturedImage: MediaImage | null;
+    recapTitlePattern: string;
+    recapStyleGuide: string | null;
+}
+
+/**
+ * A media library image, as the recap featured image picker lists it.
+ */
+export interface MediaImage {
+    id: number;
+    title: string;
+    url: string | null;
 }
 
 /**
@@ -69,6 +82,7 @@ export interface SettingsPageProps extends PluginPageProps {
         testBluesky: string;
         testMastodon: string;
         webhook: string;
+        recapImages: string;
     };
 }
 
@@ -101,6 +115,50 @@ export interface SharedEndpoints {
     syncIcons: string;
     package: PackageEndpoints;
     board: BoardEndpoints;
+    /** The weekly recap, or null for a user without the recap permission. */
+    recaps: RecapEndpoints | null;
+}
+
+/**
+ * The weekly recap's start and resume endpoints, and whether it can run now
+ * (AI ready and consented, the feature on, the GitHub App configured).
+ */
+export interface RecapEndpoints {
+    available: boolean;
+    current: string;
+    store: string;
+}
+
+export type RecapStatus = 'gathering' | 'outlining' | 'ready' | 'drafting' | 'created' | 'failed';
+
+export interface RecapMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+/**
+ * A weekly recap in progress, as `RecapController::present()` sends it.
+ */
+export interface RecapSession {
+    id: number;
+    status: RecapStatus;
+    busy: boolean;
+    publishDate: string;
+    title: string;
+    notes: string;
+    window: { start: string; end: string; previousRecap: { id: number; title: string; publishedAt: string } | null } | null;
+    releases: { package: string; tag: string; url: string; publishedAt: string }[];
+    pullRequestCount: number;
+    sources: { url: string; title: string; kind: string }[];
+    warnings: string[];
+    messages: RecapMessage[];
+    outline: string | null;
+    /** The outline rendered server side, raw HTML escaped. */
+    outlineHtml: string | null;
+    error: string | null;
+    failedAction: 'outline' | 'post' | null;
+    editUrl: string | null;
+    endpoints: { show: string; message: string; post: string; retry: string; destroy: string };
 }
 
 /**

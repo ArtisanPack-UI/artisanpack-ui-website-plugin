@@ -11,6 +11,7 @@ use ArtisanPackUI\Site\Services\Board\ProjectBoardReader;
 use ArtisanPackUI\Site\Services\ConnectionTester;
 use ArtisanPackUI\Site\Services\GitHub\GitHubAppClient;
 use ArtisanPackUI\Site\Support\AdminPages;
+use ArtisanPackUI\Site\Support\MediaImages;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
@@ -38,6 +39,7 @@ final class SettingsController
                 'testBluesky'  => route('artisanpack-ui.settings.test-bluesky'),
                 'testMastodon' => route('artisanpack-ui.settings.test-mastodon'),
                 'webhook'      => route('artisanpack-ui.webhooks.github'),
+                'recapImages'  => route('artisanpack-ui.settings.recap-images'),
             ],
         ]);
     }
@@ -72,6 +74,20 @@ final class SettingsController
             ));
         }
 
+        // Each recap setting is only touched when sent, so an older page (or
+        // a client that only edits the connections) can't clear them.
+        if ($request->exists('recap_featured_image_id')) {
+            $settings->recap_featured_image_id = $validated['recap_featured_image_id'] ?? null;
+        }
+
+        if ($request->exists('recap_title_pattern')) {
+            $settings->recap_title_pattern = self::trimmed($validated['recap_title_pattern'] ?? null);
+        }
+
+        if ($request->exists('recap_style_guide')) {
+            $settings->recap_style_guide = self::trimmed($validated['recap_style_guide'] ?? null);
+        }
+
         self::applySecret($settings, 'docs_api_token', $validated, $request->boolean('remove_docs_api_token'));
         self::applySecret($settings, 'github_private_key', $validated, $request->boolean('remove_github_private_key'));
         self::applySecret($settings, 'github_webhook_secret', $validated, $request->boolean('remove_github_webhook_secret'));
@@ -85,6 +101,19 @@ final class SettingsController
         return response()->json([
             'message'  => __('Settings saved.'),
             'settings' => self::present($settings),
+        ]);
+    }
+
+    /**
+     * Images for the recap featured image picker: the newest, or those
+     * matching `?search=`.
+     *
+     * @since 1.6.0
+     */
+    public function recapImages(Request $request): JsonResponse
+    {
+        return response()->json([
+            'images' => MediaImages::search(is_string($request->query('search')) ? $request->query('search') : null),
         ]);
     }
 
@@ -118,7 +147,7 @@ final class SettingsController
      * What the Settings page may see: every plain value, and only whether
      * each secret is set.
      *
-     * @return array{docsBaseUrl: string|null, hasDocsApiToken: bool, githubAppId: string|null, githubInstallationId: string|null, hasGitHubPrivateKey: bool, githubOrganization: string, githubProjectNumber: int|null, hasWebhookSecret: bool, blueskyHandle: string|null, hasBlueskyAppPassword: bool, mastodonInstanceUrl: string|null, hasMastodonAccessToken: bool, excludedRepositories: list<string>}
+     * @return array{docsBaseUrl: string|null, hasDocsApiToken: bool, githubAppId: string|null, githubInstallationId: string|null, hasGitHubPrivateKey: bool, githubOrganization: string, githubProjectNumber: int|null, hasWebhookSecret: bool, blueskyHandle: string|null, hasBlueskyAppPassword: bool, mastodonInstanceUrl: string|null, hasMastodonAccessToken: bool, excludedRepositories: list<string>, recapFeaturedImage: array{id: int, title: string, url: string|null}|null, recapTitlePattern: string, recapStyleGuide: string|null}
      */
     public static function present(IntegrationSettings $settings): array
     {
@@ -136,6 +165,9 @@ final class SettingsController
             'mastodonInstanceUrl'    => $settings->mastodonInstanceUrl(),
             'hasMastodonAccessToken' => filled($settings->mastodon_access_token),
             'excludedRepositories'   => $settings->excludedRepositories(),
+            'recapFeaturedImage'     => null === $settings->recap_featured_image_id ? null : MediaImages::find($settings->recap_featured_image_id),
+            'recapTitlePattern'      => $settings->recapTitlePattern(),
+            'recapStyleGuide'        => $settings->recapStyleGuide(),
         ];
     }
 
