@@ -2,6 +2,8 @@
  * Minimal typography for markdown rendered server side (an issue body, a
  * recap outline), scoped to `.apui-markdown`. The host's CSS resets lists
  * and headings, and the federated bundle ships no stylesheet.
+ *
+ * @since 1.6.0
  */
 export const MARKDOWN_CSS = `
 .apui-markdown { overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.5; }

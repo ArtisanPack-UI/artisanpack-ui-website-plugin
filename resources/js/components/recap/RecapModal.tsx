@@ -19,6 +19,8 @@
  * The outline arrives rendered server side with raw HTML escaped, which is
  * what makes inserting it as HTML safe. Portalled to `<body>`, like the
  * issue modal, so it can't nest inside a host form.
+ *
+ * @since 1.6.0
  */
 
 import { router } from '@inertiajs/react';
