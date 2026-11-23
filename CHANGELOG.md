@@ -32,15 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Upgrading
 
-- Run the plugin's migrations after updating. They add the recap settings
-  columns and the `artisanpack_ui_recap_sessions` table.
+- The update adds two migrations: the recap settings columns and the
+  `artisanpack_ui_recap_sessions` table. Keystone's admin updater runs them;
+  after a manual update, run the plugin's migrations yourself.
 - The button needs Keystone 0.21.0 or later (its Blog Posts header-actions
   filter). It also needs Keystone's AI feature set up and consented, and the
   GitHub App configured. On an older Keystone the button doesn't appear and
   nothing else changes.
-- The AI steps run on the queue. An outline or draft can take longer than
-  the database queue's default `retry_after` of 90 seconds, so set
-  `DB_QUEUE_RETRY_AFTER` above 600 where a queue worker runs.
+- The AI steps run on the queue and can take up to 600 seconds, longer than
+  the database queue's default `retry_after` of 90. Add
+  `DB_QUEUE_RETRY_AFTER=900` to the site's `.env` (`REDIS_QUEUE_RETRY_AFTER`
+  on a Redis queue) and restart the queue workers.
 
 ## [1.5.0] - 2026-11-05
 

@@ -147,8 +147,10 @@ doesn't lose the recap.
 It needs Keystone 0.21.0 or later, Keystone's AI set up and consented, the
 "Weekly recap posts" feature on in AI Studio → Features, and the GitHub App
 configured. The featured image, title pattern and AI style guide are in
-Settings. The outline and draft run as queued jobs, so set
-`DB_QUEUE_RETRY_AFTER` above 600 where a database queue worker runs.
+Settings. The outline and draft run as queued jobs that can take up to 600
+seconds, longer than the database queue's default `retry_after` of 90, so add
+`DB_QUEUE_RETRY_AFTER=900` to the site's `.env` (`REDIS_QUEUE_RETRY_AFTER` on
+a Redis queue) and restart the queue workers.
 
 ## Permissions
 
@@ -166,10 +168,17 @@ Holding any one of them shows the ArtisanPack UI nav entry.
 
 ## Updating
 
-The updater replaces the plugin's files but doesn't clear Laravel's caches. On
-a site that caches routes or config (the Keystone installer does), run
-`php artisan optimize` after updating so the plugin's new routes and settings
-take effect.
+Update through Keystone's admin updater. Since cms-framework 2.18 it
+reactivates the plugin, which runs its new migrations. It also rebuilds the
+route, config and view caches the site had, resets PHP-FPM's OPcache and
+signals the queue workers to restart, so the new version is live with no manual
+steps. If the OPcache reset can't reach PHP-FPM (an update run from the CLI,
+say), the admin says a PHP reload is still needed.
+
+Updating by hand (copying files or `git pull` in a development clone) does
+none of this: run
+`php artisan migrate --path=plugins/artisanpack-ui/database/migrations --force`,
+then `php artisan optimize` and `php artisan queue:restart`.
 
 ## Uninstalling
 
