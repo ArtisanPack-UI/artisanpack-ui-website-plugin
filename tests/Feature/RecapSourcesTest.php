@@ -100,6 +100,16 @@ describe('recap window', function (): void {
         expect($window->previousRecap['title'])->toBe('Weekly Roundup – November 14, 2026');
     });
 
+    it('matches the title prefix literally', function (): void {
+        IntegrationSettings::current()->update(['recap_title_pattern' => 'This_Week: {date}']);
+        recapPost('This_Week: November 7, 2026', '2026-11-07 10:00:00');
+        recapPost('This Week in Review', '2026-11-14 10:00:00');
+
+        $window = app(RecapWindowResolver::class)->for(CarbonImmutable::parse('2026-11-21'));
+
+        expect($window->previousRecap['title'])->toBe('This_Week: November 7, 2026');
+    });
+
     it('reads the latest published recaps as plain text style examples', function (): void {
         recapPost('This Week in ArtisanPack UI: November 14, 2026', '2026-11-14 10:00:00', ['block_content' => json_encode([
             ['name' => 'artisanpack/heading', 'attributes' => ['content' => 'Forms <em>1.6</em>'], 'innerBlocks' => []],
@@ -244,6 +254,30 @@ describe('links in the notes', function (): void {
             ->and($item['kind'])->toBe('pull_request')
             ->and($item['text'])->toContain('merged 2026-11-16T10:00:00Z')
             ->and($item['text'])->toContain('- src/Upload.php (+10 -2)');
+    });
+
+    it('reads a release whose tag contains slashes', function (): void {
+        fakeGitHub([
+            'api.github.com/repos/ArtisanPack-UI/forms/releases/tags/packages%2Fforms%2Fv1.2.0' => Http::response([
+                'tag_name' => 'packages/forms/v1.2.0', 'name' => 'Forms 1.2.0', 'body' => 'Notes', 'published_at' => '2026-11-16T10:00:00Z',
+            ]),
+        ]);
+
+        $item = app(GitHubLinkReader::class)->read('https://github.com/ArtisanPack-UI/forms/releases/tag/packages/forms/v1.2.0');
+
+        expect($item['kind'])->toBe('release')
+            ->and($item['title'])->toBe('Forms 1.2.0');
+    });
+
+    it('follows a query-only redirect on the same path', function (): void {
+        Http::fake(fn ($request) => str_contains($request->url(), 'view=plain')
+            ? Http::response('Plain text.', 200, ['Content-Type' => 'text/plain'])
+            : Http::response('', 302, ['Location' => '?view=plain']));
+
+        $page = app(PublicUrlReader::class)->read('https://laravel-news.example/news/article');
+
+        expect($page['url'])->toBe('https://laravel-news.example/news/article?view=plain')
+            ->and($page['text'])->toBe('Plain text.');
     });
 
     it('reads a public web page as text', function (): void {

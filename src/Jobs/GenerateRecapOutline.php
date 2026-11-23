@@ -14,6 +14,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -59,7 +60,9 @@ final class GenerateRecapOutline implements ShouldQueue
     {
         $session = RecapSession::query()->find($this->sessionId);
 
-        if (null === $session || RecapSession::STATUS_CREATED === $session->status) {
+        // Only the step its endpoint claimed: a stale copy finds the
+        // session moved on and leaves it be.
+        if (null === $session || ! in_array($session->status, [RecapSession::STATUS_GATHERING, RecapSession::STATUS_OUTLINING], true)) {
             return;
         }
 
@@ -76,17 +79,34 @@ final class GenerateRecapOutline implements ShouldQueue
 
             $result = $writer->outline(RecapPrompts::outlineInput($session->context()));
 
-            $session->outline  = $result['outline'];
-            $session->packages = $result['packages'];
-            $session->mergeSources($result['sources']);
-            $session->addMessage('assistant', '' === $result['reply'] ? __('Here\'s the outline.') : $result['reply']);
-            $session->status        = RecapSession::STATUS_READY;
-            $session->failed_action = null;
-            $session->error         = null;
-            $session->touchExpiry();
-            $session->save();
+            DB::transaction(static function () use ($session, $result): void {
+                $status = RecapSession::query()->whereKey($session->getKey())->lockForUpdate()->value('status');
+
+                if (RecapSession::STATUS_OUTLINING !== $status) {
+                    return;
+                }
+
+                $session->outline  = $result['outline'];
+                $session->packages = $result['packages'];
+                $session->mergeSources($result['sources']);
+                $session->addMessage('assistant', '' === $result['reply'] ? __('Here\'s the outline.') : $result['reply']);
+                $session->status        = RecapSession::STATUS_READY;
+                $session->failed_action = null;
+                $session->error         = null;
+                $session->touchExpiry();
+                $session->save();
+            });
         } catch (Throwable $exception) {
             $this->recordFailure($session, RecapSession::ACTION_OUTLINE, $exception);
         }
+    }
+
+    /**
+     * The queue gave up on the job (every attempt timed out, say), so let
+     * the modal offer a retry instead of waiting on it forever.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        $this->recordTerminalFailure($this->sessionId, RecapSession::ACTION_OUTLINE, $exception);
     }
 }

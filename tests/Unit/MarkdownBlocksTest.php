@@ -57,6 +57,12 @@ it('turns lists into list blocks with nested lists inside their item', function 
     ]);
 });
 
+it('keeps a list item whose text is 0', function (): void {
+    $blocks = withoutClientIds(MarkdownBlocks::convert("- 0\n- One"));
+
+    expect(array_column(array_column($blocks[0]['innerBlocks'], 'attributes'), 'content'))->toBe(['0', 'One']);
+});
+
 it('turns code blocks into code blocks, escaped', function (): void {
     $blocks = withoutClientIds(MarkdownBlocks::convert("```bash\ncomposer require <pkg>\n```"));
 

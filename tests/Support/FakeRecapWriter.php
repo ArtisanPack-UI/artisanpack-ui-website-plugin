@@ -32,9 +32,21 @@ final class FakeRecapWriter implements RecapWriter
         return $this->available;
     }
 
+    /**
+     * Run while the outline is being "written", e.g. to change the session
+     * the way a concurrent request would.
+     *
+     * @var (\Closure(): void)|null
+     */
+    public ?\Closure $duringOutline = null;
+
     public function outline(array $input): array
     {
         $this->outlineInputs[] = $input;
+
+        if (null !== $this->duringOutline) {
+            ($this->duringOutline)();
+        }
 
         return $this->next($this->outlines, [
             'outline'  => "## Releases\n\n- Forms v1.6.0",

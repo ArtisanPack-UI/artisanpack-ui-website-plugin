@@ -25,7 +25,7 @@ final class GitHubLinkReader
 
     public const FILES_LIMIT = 40;
 
-    private const LINK = '#^https?://(?:www\.)?github\.com/([A-Za-z0-9._-]{1,100})/([A-Za-z0-9._-]{1,100})/(pull|issues|commit|releases/tag)/([^/?\#]+)#i';
+    private const LINK = '#^https?://(?:www\.)?github\.com/([A-Za-z0-9._-]{1,100})/([A-Za-z0-9._-]{1,100})/(pull|issues|commit|releases/tag)/([^?\#]+)#i';
 
     public function __construct(private readonly GitHubAppClient $gitHub) {}
 
@@ -52,6 +52,10 @@ final class GitHubLinkReader
 
         [, $owner, $name, $kind, $reference] = $match;
         $repo = '/repos/' . $owner . '/' . $name;
+
+        // A release tag may contain slashes (`packages/forms/v1.2.0`); for
+        // the rest only the first segment counts (`/pull/12/files` → 12).
+        $reference = 'releases/tag' === strtolower($kind) ? rtrim($reference, '/') : strtok($reference, '/');
 
         return match (strtolower($kind)) {
             'pull'   => $this->pullRequest($url, $repo, self::number($reference, $url)),

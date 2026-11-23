@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ArtisanPackUI\Site\Exceptions\RecapException;
+use ArtisanPackUI\Site\Jobs\CreateRecapPost;
 use ArtisanPackUI\Site\Jobs\GenerateRecapOutline;
 use ArtisanPackUI\Site\Models\IntegrationSettings;
 use ArtisanPackUI\Site\Models\Package;
@@ -173,6 +174,81 @@ it('refuses to revise or create while a step is running', function (string $path
     'post'    => ['post', []],
     'retry'   => ['retry', []],
 ]);
+
+/**
+ * A session in the given state, as a job or a concurrent request left it.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function recapSessionIn(string $status, array $attributes = []): RecapSession
+{
+    return RecapSession::query()->create([
+        'user_id'      => test()->user->getKey(),
+        'publish_date' => '2026-11-20',
+        'title'        => 'This Week in ArtisanPack UI: November 20, 2026',
+        'window'       => ['start' => '2026-11-13T00:00:00+00:00', 'end' => '2026-11-20T23:59:59+00:00', 'previousRecap' => null],
+        'outline'      => '## Outline',
+        'messages'     => [],
+        'status'       => $status,
+        'expires_at'   => now()->addDay(),
+        ...$attributes,
+    ]);
+}
+
+it('records a step the queue refuses, so it can be retried', function (): void {
+    config(['queue.default' => 'broken', 'queue.connections.broken' => ['driver' => 'missing']]);
+
+    startRecap()->assertAccepted();
+    $session = RecapSession::query()->sole();
+
+    expect($session->status)->toBe(RecapSession::STATUS_FAILED)
+        ->and($session->failed_action)->toBe(RecapSession::ACTION_OUTLINE)
+        ->and($session->error)->toContain('couldn\'t be queued');
+
+    config(['queue.default' => 'sync']);
+
+    $this->postJson("/admin/artisanpack-ui/recaps/{$session->getKey()}/retry")->assertAccepted();
+
+    expect($session->refresh()->status)->toBe(RecapSession::STATUS_READY);
+});
+
+it('records a step the queue gave up on, but never over a created post', function (): void {
+    $drafting = recapSessionIn(RecapSession::STATUS_DRAFTING);
+    $created  = recapSessionIn(RecapSession::STATUS_CREATED, ['post_id' => 7]);
+
+    (new CreateRecapPost($drafting->getKey()))->failed(new RuntimeException('Timed out'));
+    (new GenerateRecapOutline($created->getKey()))->failed(new RuntimeException('Timed out'));
+
+    expect($drafting->refresh()->status)->toBe(RecapSession::STATUS_FAILED)
+        ->and($drafting->failed_action)->toBe(RecapSession::ACTION_POST)
+        ->and($created->refresh()->status)->toBe(RecapSession::STATUS_CREATED);
+});
+
+it('leaves a session alone once another step has moved it on', function (): void {
+    $ready = recapSessionIn(RecapSession::STATUS_READY);
+
+    app()->call([new CreateRecapPost($ready->getKey()), 'handle']);
+
+    expect($this->posts->created)->toBe([])
+        ->and($ready->refresh()->status)->toBe(RecapSession::STATUS_READY);
+});
+
+it('doesn\'t mark the outline ready if the session changed while it was written', function (): void {
+    $session = recapSessionIn(RecapSession::STATUS_OUTLINING);
+    $this->writer->duringOutline = fn () => RecapSession::query()->whereKey($session->getKey())->update(['status' => RecapSession::STATUS_CREATED]);
+
+    app()->call([new GenerateRecapOutline($session->getKey()), 'handle']);
+
+    expect($session->refresh()->status)->toBe(RecapSession::STATUS_CREATED)
+        ->and($session->outline)->toBe('## Outline');
+});
+
+it('hides an expired recap even before it is pruned', function (): void {
+    $session = recapSessionIn(RecapSession::STATUS_READY, ['expires_at' => now()->subMinute()]);
+
+    $this->getJson("/admin/artisanpack-ui/recaps/{$session->getKey()}")->assertNotFound();
+    $this->postJson("/admin/artisanpack-ui/recaps/{$session->getKey()}/messages", ['message' => 'Again'])->assertNotFound();
+});
 
 it('replaces the recap in progress when another is started', function (): void {
     startRecap();

@@ -219,7 +219,9 @@ final class UpdateSettingsRequest extends FormRequest
     }
 
     /**
-     * The recap title pattern must say where the publish date goes.
+     * The recap title pattern must say where the publish date goes, start
+     * with text that identifies a recap (earlier recaps are found by it),
+     * and render a title that fits the sessions table with any date.
      *
      * @since 1.6.0
      */
@@ -230,6 +232,22 @@ final class UpdateSettingsRequest extends FormRequest
                 $fail(__('The title pattern must contain :placeholder, where the publish date goes.', [
                     'placeholder' => IntegrationSettings::RECAP_DATE_PLACEHOLDER,
                 ]));
+
+                return;
+            }
+
+            if ('' === IntegrationSettings::recapTitlePrefixOf($value)) {
+                $fail(__('The title pattern must start with some text before :placeholder, which is how earlier recaps are found.', [
+                    'placeholder' => IntegrationSettings::RECAP_DATE_PLACEHOLDER,
+                ]));
+
+                return;
+            }
+
+            $longest = str_replace(IntegrationSettings::RECAP_DATE_PLACEHOLDER, str_repeat('x', IntegrationSettings::RECAP_DATE_MAX_LENGTH), trim($value));
+
+            if (mb_strlen($longest) > IntegrationSettings::RECAP_TITLE_MAX_LENGTH) {
+                $fail(__('The title pattern makes titles longer than :max characters. Shorten it.', ['max' => IntegrationSettings::RECAP_TITLE_MAX_LENGTH]));
             }
         };
     }

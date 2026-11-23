@@ -135,7 +135,7 @@ final class MarkdownBlocks
                 }
             }
 
-            $items[] = self::make('artisanpack/list-item', ['content' => implode('<br>', array_filter($text))], $nested);
+            $items[] = self::make('artisanpack/list-item', ['content' => implode('<br>', array_filter($text, static fn (string $line): bool => '' !== $line))], $nested);
         }
 
         return self::make('artisanpack/list', $attributes, $items);

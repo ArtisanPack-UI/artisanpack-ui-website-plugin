@@ -25,6 +25,18 @@ trait RecordsRecapFailures
      */
     protected function recordFailure(RecapSession $session, string $action, Throwable $exception): void
     {
+        // Only while the step still owns the session: never over a created
+        // post, or a step another request has since started.
+        $status = RecapSession::query()->whereKey($session->getKey())->value('status');
+
+        if (! in_array($status, [RecapSession::STATUS_GATHERING, RecapSession::STATUS_OUTLINING, RecapSession::STATUS_DRAFTING], true)) {
+            return;
+        }
+
+        // Drop whatever the step changed in memory but didn't commit, such
+        // as a rolled-back post's id.
+        $session->refresh();
+
         $known = $exception instanceof RecapException
             || $exception instanceof GitHubException
             || $exception instanceof IntegrationNotConfiguredException;
@@ -41,5 +53,21 @@ trait RecordsRecapFailures
         $session->failed_action = $action;
         $session->error         = $known ? $exception->getMessage() : __('Something went wrong. Try again, and check the logs if it keeps happening.');
         $session->save();
+    }
+
+    /**
+     * Record a failure the job couldn't catch itself: the queue gave up on
+     * it, e.g. after every attempt hit the timeout. Called from the job's
+     * `failed()` callback.
+     *
+     * @param  RecapSession::ACTION_*  $action
+     */
+    protected function recordTerminalFailure(int $sessionId, string $action, ?Throwable $exception): void
+    {
+        $session = RecapSession::query()->find($sessionId);
+
+        if (null !== $session) {
+            $this->recordFailure($session, $action, $exception ?? new RecapException(__('The step stopped before it finished. Try again.')));
+        }
     }
 }

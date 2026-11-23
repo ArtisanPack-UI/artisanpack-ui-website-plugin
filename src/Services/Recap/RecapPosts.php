@@ -150,14 +150,23 @@ final class RecapPosts
      */
     private function recaps(): Builder
     {
-        // Not escaped: the prefix is admin-written, a stray `%` or `_` only
-        // loosens the match, and SQLite's LIKE has no default escape.
-        $like = $this->settings->recapTitlePrefix() . '%';
+        $prefix = $this->settings->recapTitlePrefix();
 
-        return DB::table('posts')
+        // The prefix is matched literally, with an explicit escape since
+        // SQLite's LIKE has no default one. Settings refuses an empty
+        // prefix, but should one get through it matches nothing rather
+        // than every post in Updates.
+        $query = DB::table('posts')
             ->whereNull('posts.deleted_at')
-            ->whereNotNull('posts.published_at')
-            ->where('posts.title', 'like', $like)
+            ->whereNotNull('posts.published_at');
+
+        if ('' === $prefix) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereRaw("posts.title LIKE ? ESCAPE '!'", [str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $prefix) . '%']);
+        }
+
+        return $query
             ->whereExists(static function (Builder $query): void {
                 $query->select(DB::raw(1))
                     ->from('post_category_pivots')

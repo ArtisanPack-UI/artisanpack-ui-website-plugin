@@ -32,6 +32,9 @@ import type { RecapEndpoints, RecapSession } from '../../lib/types';
 /** How often a running step is polled, in milliseconds. */
 const POLL_INTERVAL = 2000;
 
+/** The longest wait between polls while polling keeps failing. */
+const MAX_POLL_INTERVAL = 30000;
+
 const INPUT_CLASS =
     'w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm text-base-content outline-none focus:border-primary';
 
@@ -72,6 +75,9 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
     const messageId = useId();
 
     const [loading, setLoading] = useState(true);
+    const [lookupFailed, setLookupFailed] = useState(false);
+    const [lookupAttempt, setLookupAttempt] = useState(0);
+    const [pollFailures, setPollFailures] = useState(0);
     const [resumable, setResumable] = useState<RecapSession | null>(null);
     const [session, setSession] = useState<RecapSession | null>(null);
     const [publishDate, setPublishDate] = useState(nextFriday);
@@ -92,6 +98,10 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
     useEffect(() => {
         let active = true;
 
+        setLoading(true);
+        setLookupFailed(false);
+        setError(null);
+
         apiFetch<{ session: RecapSession | null }>(endpoints.current)
             .then((response) => {
                 if (active) {
@@ -99,7 +109,10 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
                 }
             })
             .catch((loadError: unknown) => {
+                // Not "no recap": offering a fresh start here would discard
+                // the one in progress.
                 if (active) {
+                    setLookupFailed(true);
                     setError(loadError instanceof Error ? loadError.message : 'Could not check for a recap in progress.');
                 }
             })
@@ -112,9 +125,9 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
         return () => {
             active = false;
         };
-    }, [endpoints.current]);
+    }, [endpoints.current, lookupAttempt]);
 
-    // Poll while a step runs.
+    // Poll while a step runs, backing off while requests fail.
     useEffect(() => {
         if (session === null || !session.busy) {
             return;
@@ -125,21 +138,26 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
             apiFetch<{ session: RecapSession }>(session.endpoints.show)
                 .then((response) => {
                     if (active) {
+                        if (pollFailures > 0) {
+                            setPollFailures(0);
+                            setError(null);
+                        }
                         setSession(response.session);
                     }
                 })
                 .catch((pollError: unknown) => {
                     if (active) {
-                        setError(pollError instanceof Error ? pollError.message : 'Lost track of the recap. Close and reopen to resume it.');
+                        setError(pollError instanceof Error ? pollError.message : 'Lost track of the recap. Trying again…');
+                        setPollFailures((failures) => failures + 1);
                     }
                 });
-        }, POLL_INTERVAL);
+        }, Math.min(POLL_INTERVAL * 2 ** pollFailures, MAX_POLL_INTERVAL));
 
         return () => {
             active = false;
             window.clearTimeout(timer);
         };
-    }, [session]);
+    }, [session, pollFailures]);
 
     // Open the editor once the post exists.
     useEffect(() => {
@@ -155,6 +173,7 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
 
         try {
             const response = await apiFetch<{ session: RecapSession }>(url, init);
+            setPollFailures(0);
             setSession(response.session);
 
             return true;
@@ -249,7 +268,15 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
 
                 {loading && <p className="mt-6 text-sm text-base-content/60">Checking for a recap in progress…</p>}
 
-                {!loading && session === null && resumable !== null && (
+                {!loading && lookupFailed && (
+                    <div className="mt-6">
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setLookupAttempt((attempt) => attempt + 1)}>
+                            Try again
+                        </button>
+                    </div>
+                )}
+
+                {!loading && !lookupFailed && session === null && resumable !== null && (
                     <div className="mt-6 space-y-4">
                         <p className="text-sm text-base-content">
                             You have a recap in progress: <strong>{resumable.title}</strong>.
@@ -265,7 +292,7 @@ export default function RecapModal({ endpoints, onClose }: { endpoints: RecapEnd
                     </div>
                 )}
 
-                {!loading && session === null && resumable === null && (
+                {!loading && !lookupFailed && session === null && resumable === null && (
                     <form className="mt-6 space-y-4" onSubmit={start}>
                         <div className="space-y-1.5">
                             <label htmlFor={dateId} className="text-sm font-medium text-base-content">

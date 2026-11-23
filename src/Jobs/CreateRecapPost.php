@@ -15,6 +15,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -24,7 +25,8 @@ use Throwable;
  * The session then ends, holding the post's edit URL.
  *
  * A failure leaves the outline as it was and is recorded on the
- * session for the modal to retry.
+ * session for the modal to retry. The post and the session's completion
+ * commit together, so a retry after a crash can't create a second draft.
  *
  * @since 1.6.0
  */
@@ -59,25 +61,46 @@ final class CreateRecapPost implements ShouldQueue
     {
         $session = RecapSession::query()->find($this->sessionId);
 
-        if (null === $session || RecapSession::STATUS_CREATED === $session->status || null === $session->outline) {
+        // Only the step its endpoint claimed: a stale copy finds the
+        // session moved on and leaves it be.
+        if (null === $session || RecapSession::STATUS_DRAFTING !== $session->status || null === $session->outline) {
             return;
         }
 
         try {
             $context = $session->context();
             $draft   = $writer->draft(RecapPrompts::draftInput($context));
-            $created = $posts->create($builder->build($context, $draft, $session->user_id));
+            $data    = $builder->build($context, $draft, $session->user_id);
 
-            $session->mergeSources($draft['sources']);
-            $session->status        = RecapSession::STATUS_CREATED;
-            $session->post_id       = $created['id'];
-            $session->edit_url      = $created['editUrl'];
-            $session->failed_action = null;
-            $session->error         = null;
-            $session->expires_at    = now()->addHour();
-            $session->save();
+            DB::transaction(static function () use ($session, $posts, $data, $draft): void {
+                $status = RecapSession::query()->whereKey($session->getKey())->lockForUpdate()->value('status');
+
+                if (RecapSession::STATUS_DRAFTING !== $status) {
+                    return;
+                }
+
+                $created = $posts->create($data);
+
+                $session->mergeSources($draft['sources']);
+                $session->status        = RecapSession::STATUS_CREATED;
+                $session->post_id       = $created['id'];
+                $session->edit_url      = $created['editUrl'];
+                $session->failed_action = null;
+                $session->error         = null;
+                $session->expires_at    = now()->addHour();
+                $session->save();
+            });
         } catch (Throwable $exception) {
             $this->recordFailure($session, RecapSession::ACTION_POST, $exception);
         }
+    }
+
+    /**
+     * The queue gave up on the job (every attempt timed out, say), so let
+     * the modal offer a retry instead of waiting on it forever.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        $this->recordTerminalFailure($this->sessionId, RecapSession::ACTION_POST, $exception);
     }
 }

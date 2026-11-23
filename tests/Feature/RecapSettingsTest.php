@@ -82,6 +82,8 @@ it('rejects invalid recap settings', function (Closure $value, string $field): v
         ->assertJsonValidationErrors($field);
 })->with([
     'a pattern without {date}' => [fn () => 'This Week in ArtisanPack UI', 'recap_title_pattern'],
+    'nothing before {date}'    => [fn () => '{date} — Weekly recap', 'recap_title_pattern'],
+    'titles over 255 chars'    => [fn () => str_repeat('a', 240) . ' {date}', 'recap_title_pattern'],
     'a missing image'          => [fn () => 9999, 'recap_featured_image_id'],
     'a document, not an image' => [fn () => mediaRow(['mime_type' => 'application/pdf']), 'recap_featured_image_id'],
     'a trashed image'          => [fn () => mediaRow(['deleted_at' => now()]), 'recap_featured_image_id'],
@@ -97,6 +99,16 @@ it('lists and searches the media library images', function (): void {
         ->assertJsonCount(2, 'images');
 
     $this->getJson('/admin/artisanpack-ui/settings/recap-images?search=recap')
+        ->assertOk()
+        ->assertJsonCount(1, 'images')
+        ->assertJsonPath('images.0.id', $cover);
+});
+
+it('matches underscores in an image search literally', function (): void {
+    $cover = mediaRow(['title' => 'Cover', 'file_name' => 'recap_cover.jpg']);
+    mediaRow(['title' => 'Other', 'file_name' => 'recapXcover.jpg']);
+
+    $this->getJson('/admin/artisanpack-ui/settings/recap-images?search=recap_cover')
         ->assertOk()
         ->assertJsonCount(1, 'images')
         ->assertJsonPath('images.0.id', $cover);

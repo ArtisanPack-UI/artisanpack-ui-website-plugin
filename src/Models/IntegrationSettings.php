@@ -77,6 +77,21 @@ final class IntegrationSettings extends Model
      */
     public const RECAP_DATE_PLACEHOLDER = '{date}';
 
+    /**
+     * The longest publish date the placeholder becomes ("September 30,
+     * 2026"), so a pattern can be checked against the title column.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_DATE_MAX_LENGTH = 18;
+
+    /**
+     * The longest recap title the sessions table holds.
+     *
+     * @since 1.6.0
+     */
+    public const RECAP_TITLE_MAX_LENGTH = 255;
+
     protected $table = 'artisanpack_ui_settings';
 
     /** @var list<string> */
@@ -265,7 +280,18 @@ final class IntegrationSettings extends Model
      */
     public function recapTitlePrefix(): string
     {
-        $pattern = $this->recapTitlePattern();
+        return self::recapTitlePrefixOf($this->recapTitlePattern());
+    }
+
+    /**
+     * {@see self::recapTitlePrefix()} for any pattern, so the Settings
+     * validation can refuse one that leaves nothing to recognise a recap by.
+     *
+     * @since 1.6.0
+     */
+    public static function recapTitlePrefixOf(string $pattern): string
+    {
+        $pattern = trim($pattern);
         $at      = strpos($pattern, self::RECAP_DATE_PLACEHOLDER);
         $prefix  = false === $at ? $pattern : substr($pattern, 0, $at);
 

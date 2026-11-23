@@ -69,9 +69,10 @@ final class MediaImages
         $search = trim((string) $search);
 
         if ('' !== $search) {
-            $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
+            // An explicit escape character, since SQLite's LIKE has none.
+            $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
             $query->where(static function (Builder $query) use ($like): void {
-                $query->where('title', 'like', $like)->orWhere('file_name', 'like', $like);
+                $query->whereRaw("title LIKE ? ESCAPE '!'", [$like])->orWhereRaw("file_name LIKE ? ESCAPE '!'", [$like]);
             });
         }
 

@@ -6,7 +6,9 @@ namespace ArtisanPackUI\Site\Services\Recap;
 
 use ArtisanPackUI\Site\Exceptions\RecapException;
 use ArtisanPackUI\Site\Support\OutboundUrlPolicy;
+use GuzzleHttp\Exception\TransferException;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -32,7 +34,8 @@ final class PublicUrlReader
     public const TIMEOUT = 10;
 
     /**
-     * The largest response read, in bytes, when the server says its size.
+     * The largest response read, in bytes. A declared larger size is
+     * refused up front; an undeclared one is cut off once it gets there.
      */
     public const MAX_BYTES = 2_000_000;
 
@@ -85,8 +88,20 @@ final class PublicUrlReader
             throw new RecapException(__(':url can\'t be fetched: :problem', ['url' => self::short($url), 'problem' => $problem]));
         }
 
-        $options = ['curl' => [CURLOPT_MAXFILESIZE => self::MAX_BYTES]];
-        $pin     = OutboundUrlPolicy::curlResolvePin($url, $ips);
+        // CURLOPT_MAXFILESIZE only stops a transfer whose size is declared
+        // (before libcurl 8.4), so the progress callback aborts one that
+        // grows past the limit while it's read.
+        $tooLarge = false;
+        $options  = ['curl' => [
+            CURLOPT_MAXFILESIZE      => self::MAX_BYTES,
+            CURLOPT_NOPROGRESS       => false,
+            CURLOPT_XFERINFOFUNCTION => static function (mixed $handle, int $downloadTotal, int $downloaded) use (&$tooLarge): int {
+                $tooLarge = $downloaded > self::MAX_BYTES;
+
+                return $tooLarge ? 1 : 0;
+            },
+        ]];
+        $pin = OutboundUrlPolicy::curlResolvePin($url, $ips);
 
         if (null !== $pin) {
             $options['curl'][CURLOPT_RESOLVE] = [$pin];
@@ -100,7 +115,11 @@ final class PublicUrlReader
                 ->withUserAgent('ArtisanPackUI-Recap/1.0')
                 ->withOptions($options)
                 ->get($url);
-        } catch (ConnectionException) {
+        } catch (ConnectionException|RequestException|TransferException $exception) {
+            if ($tooLarge) {
+                throw new RecapException(__(':url is too large to read.', ['url' => self::short($url)]));
+            }
+
             throw new RecapException(__(':url couldn\'t be reached.', ['url' => self::short($url)]));
         }
     }
@@ -132,6 +151,16 @@ final class PublicUrlReader
         }
 
         $path = $parts['path'] ?? '/';
+
+        // RFC 3986 §5.2.2: a query-only reference keeps the current path, a
+        // fragment-only one the path and query too.
+        if (str_starts_with($location, '?')) {
+            return $origin . $path . $location;
+        }
+
+        if (str_starts_with($location, '#')) {
+            return $origin . $path . (isset($parts['query']) ? '?' . $parts['query'] : '') . $location;
+        }
 
         return $origin . substr($path, 0, (int) strrpos($path, '/') + 1) . $location;
     }
