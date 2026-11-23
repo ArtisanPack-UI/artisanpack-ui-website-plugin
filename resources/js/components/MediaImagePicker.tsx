@@ -4,6 +4,8 @@
  * shared with plugins, so this lists images through the plugin's
  * `settings/recap-images` endpoint (see `Support/MediaImages.php`) instead:
  * the newest images, narrowed by a title search.
+ *
+ * @since 1.6.0
  */
 
 import { useEffect, useId, useState } from 'react';

@@ -8,6 +8,8 @@
  * can run (AI ready and consented, the feature on, the GitHub App set up),
  * from the `artisanpackUi.endpoints.recaps` prop. The modal is its own
  * chunk, loaded on first click.
+ *
+ * @since 1.6.0
  */
 
 import { lazy, Suspense, useState } from 'react';
